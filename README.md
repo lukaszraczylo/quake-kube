@@ -1,6 +1,8 @@
-# Fork allowing for maintenance and updates to the original project
+## This is maintained fork
 
-![Build Status](https://github.com/criticalstack/quake-kube/workflows/Push%20Image/badge.svg)
+This fork is maintained by Lukasz Raczylo, because everyone loves Q3 and if someone wants to play it, it should be easy and relatively safe to do so. I will try to keep updates of the containers and dependencies in check.
+
+![Build Status](https://github.com/lukaszraczylo/quake-kube/workflows/Push%20Image/badge.svg)
 
 # QuakeKube
 
@@ -13,25 +15,9 @@ QuakeKube is a Kubernetes-ified version of [QuakeJS](https://github.com/inolen/q
 Deploy the example manifest:
 
 ```shell
-$ kubectl apply -f https://raw.githubusercontent.com/criticalstack/quake-kube/master/example.yaml
+$ kubectl apply -f https://raw.githubusercontent.com/lukaszraczylo/quake-kube/master/example.yaml
 ```
 
-
-### Without an existing K8s cluster
-
-Start an instance of Kubernetes locally using [cinder](https://docs.crit.sh/cinder-guide/what-is-cinder.html) (or [kind](https://kind.sigs.k8s.io/)):
-
-```shell
-$ cinder create cluster
-```
-
-Deploy the example manifest:
-
-```shell
-$ kubectl apply -f example.yaml
-```
-
-Finally, navigate to `http://$(cinder get ip):30001` in the browser.
 
 ## How it works
 
@@ -179,6 +165,7 @@ This issue is circumvented by ensuring that the Go compiler does not run across 
 
 ## Credits
 
+* [criticalstack/quake-kube](https://github.com/criticalstack/quake-kube) - The original project that this is forked from.
 * [inolen/quakejs](https://github.com/inolen/quakejs) - The really awesome QuakeJS project that makes this possible.
 * [ioquake/ioq3](https://github.com/ioquake/ioq3) - The community supported version of Quake 3 used by QuakeJS. It is licensed under the GPLv2.
 * [begleysm/quakejs](https://github.com/begleysm/quakejs) - Information in the README.md (very helpful) was used as a guide, as well as, some forked assets of this project (which came from quakejs-web originally) were used.
