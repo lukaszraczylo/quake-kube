@@ -1,77 +1,102 @@
 name: Push Image
 
 on:
+  workflow_dispatch:
   push:
-    # Sequence of patterns matched against refs/tags
-    tags:
-    - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+    branches:
+      - master
+      - main
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
 
 jobs:
-  push:
-    runs-on: ubuntu-latest
+  prepare:
+    name: Preparing build context
+    runs-on: ubuntu-20.04
+    outputs:
+      SANITISED_REPOSITORY_NAME: ${{ steps.get_env.outputs.SANITISED_REPOSITORY_NAME }}
+      DOCKER_IMAGE: ${{ steps.get_env.outputs.DOCKER_IMAGE }}
+      GITHUB_COMMIT_NUMBER: ${{ steps.get_env.outputs.GITHUB_COMMIT_NUMBER }}
+      GITHUB_SHA: ${{ steps.get_env.outputs.GITHUB_SHA }}
+      DOCKER_IMAGE_SEMVER: ${{ steps.semver.outputs.semantic_version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: "0"
+      - name: Set environment variables
+        id: get_env
+        run: |
+          TMP_SANITISED_REPOSITORY_NAME=$(echo ${{ github.event.repository.name }} | sed -e 's|\.|-|g')
+          echo "::set-output name=SANITISED_REPOSITORY_NAME::$TMP_SANITISED_REPOSITORY_NAME"
+          echo "::set-output name=DOCKER_IMAGE::ghcr.io/${{ github.repository_owner }}/q3"
+          echo "::set-output name=GITHUB_COMMIT_NUMBER::$(git rev-list --count HEAD)"
+          echo "::set-output name=GITHUB_SHA::$(echo ${GITHUB_SHA::8})"
+
+      - name: Establish semver
+        id: semver
+        uses: lukaszraczylo/semver-generator@v1
+        with:
+          config_file: semver.yaml
+          repository_local: true
+          github_username: ${{ github.ACTOR }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Semver check
+        run: |
+          echo "Semantic version detected: ${{ steps.semver.outputs.semantic_version }}"
+
+  build-local:
+    needs: [prepare]
+    name: Docker image build (multiarch)
+    runs-on: ubuntu-20.04
+    #     runs-on: self-hosted
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build image
+        id: docker_build
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          platforms: linux/arm64,linux/amd64
+          push: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
+          tags: "${{ needs.prepare.outputs.DOCKER_IMAGE  }}:${{ needs.prepare.outputs.GITHUB_SHA }},${{ needs.prepare.outputs.DOCKER_IMAGE  }}:${{ needs.prepare.outputs.DOCKER_IMAGE_SEMVER }},${{ needs.prepare.outputs.DOCKER_IMAGE  }}:latest"
+          build-args: |
+            ACCESS_USERNAME=${{ github.actor }}
+            MICROSERVICE_NAME=${{ github.event.repository.name }}
+            GITHUB_COMMIT_NUMBER=${{ needs.prepare.outputs.GITHUB_COMMIT_NUMBER }}
+            GITHUB_SHA=${{ needs.prepare.outputs.GITHUB_SHA }}
+          labels: "org.opencontainers.image.revision=${{ needs.prepare.outputs.GITHUB_SHA }},org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ'),org.opencontainers.image.version=${{ needs.prepare.outputs.DOCKER_IMAGE_SEMVER }},com.github.repo.branch=$(echo ${GITHUB_REF##*/} | tr '[A-Z]' '[a-z]')"
+          no-cache: false
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [prepare, build-local]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Prepare
-        id: prep
+      - name: Get list of the commits since last release
         run: |
-          DOCKER_IMAGE=criticalstack/quake
-          VERSION=noop
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            VERSION=nightly
-          elif [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-          elif [[ $GITHUB_REF == refs/heads/* ]]; then
-            VERSION=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
-            if [ "${{ github.event.repository.default_branch }}" = "$VERSION" ]; then
-              VERSION=edge
-            fi
-          elif [[ $GITHUB_REF == refs/pull/* ]]; then
-            VERSION=pr-${{ github.event.number }}
-          fi
-          TAGS="${DOCKER_IMAGE}:${VERSION}"
-          if [[ $VERSION =~ ^v[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            MINOR=${VERSION%.*}
-            MAJOR=${MINOR%.*}
-            TAGS="$TAGS,${DOCKER_IMAGE}:${MINOR},${DOCKER_IMAGE}:${MAJOR},${DOCKER_IMAGE}:latest"
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            TAGS="$TAGS,${DOCKER_IMAGE}:sha-${GITHUB_SHA::8}"
-          fi
-          echo ::set-output name=version::${VERSION}
-          echo ::set-output name=tags::${TAGS}
-          echo ::set-output name=created::$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-
-      - name: Cache Docker layers
-        uses: actions/cache@v2
+          printf "$(git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%h %s")" > .release_notes
+      - name: Create Release
+        id: create_release
+        # if: needs.prepare.outputs.CHECK_IF_MASTER_BRANCH == 'true'
+        uses: softprops/action-gh-release@v1
         with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push
-        id: docker_build
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.prep.outputs.tags }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
+          name: v${{ needs.prepare.outputs.DOCKER_IMAGE_SEMVER }}
+          body_path: .release_notes
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: v${{ needs.prepare.outputs.DOCKER_IMAGE_SEMVER }}
+          prerelease: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}

@@ -10,7 +10,7 @@ gen: ## Generate and embed templates
 	@go run tools/genstatic.go public public
 
 VERSION ?= latest
-IMAGE   ?= docker.io/criticalstack/quake:$(VERSION)
+IMAGE   ?= ghcr.io/lukaszraczylo/q3:$(VERSION)
 
 .PHONY: build
 build:
@@ -18,7 +18,7 @@ build:
 
 .PHONY: buildx
 buildx:
-	@docker buildx build . --platform=linux/amd64,linux/arm64 --progress=auto -t $(IMAGE) --push
+	@docker buildx build . --platform=linux/amd64,linux/arm64 --progress=plain -t $(IMAGE) --push
 
 .PHONY: test
 test:
