@@ -40,7 +40,7 @@ func NewCommand() *cobra.Command {
 				return err
 			}
 			if !opts.AcceptEula {
-				fmt.Println(quakeserver.Q3DemoEULA)
+				fmt.Printf(quakeserver.Q3DemoEULA)
 				return errors.New("You must agree to the EULA to continue")
 			}
 			if err := httputil.GetUntil(opts.ContentServer, ctx.Done()); err != nil {
