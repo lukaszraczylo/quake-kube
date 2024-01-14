@@ -61,9 +61,9 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
       - name: Login to GHCR
         uses: docker/login-action@v2
         with:
@@ -72,8 +72,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build image
         id: docker_build
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v5
         with:
+          context: .
           builder: ${{ steps.buildx.outputs.name }}
           platforms: linux/arm64,linux/amd64
           push: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
@@ -84,7 +85,8 @@ jobs:
             GITHUB_COMMIT_NUMBER=${{ needs.prepare.outputs.GITHUB_COMMIT_NUMBER }}
             GITHUB_SHA=${{ needs.prepare.outputs.GITHUB_SHA }}
           labels: "org.opencontainers.image.revision=${{ needs.prepare.outputs.GITHUB_SHA }},org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ'),org.opencontainers.image.version=${{ needs.prepare.outputs.DOCKER_IMAGE_SEMVER }},com.github.repo.branch=$(echo ${GITHUB_REF##*/} | tr '[A-Z]' '[a-z]')"
-          no-cache: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   release:
     name: Create Release
