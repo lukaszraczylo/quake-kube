@@ -165,7 +165,7 @@ This issue is circumvented by ensuring that the Go compiler does not run across 
 
 ## Credits
 
-* [criticalstack/quake-kube](https://github.com/criticalstack/quake-kube) - The original project that this is forked from.
+* [criticalstack/quake-kube](https://github.com/lukaszraczylo/quake-kube) - The original project that this is forked from.
 * [inolen/quakejs](https://github.com/inolen/quakejs) - The really awesome QuakeJS project that makes this possible.
 * [ioquake/ioq3](https://github.com/ioquake/ioq3) - The community supported version of Quake 3 used by QuakeJS. It is licensed under the GPLv2.
 * [begleysm/quakejs](https://github.com/begleysm/quakejs) - Information in the README.md (very helpful) was used as a guide, as well as, some forked assets of this project (which came from quakejs-web originally) were used.

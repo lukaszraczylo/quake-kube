@@ -9,11 +9,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	quakeclient "github.com/criticalstack/quake-kube/internal/quake/client"
-	"github.com/criticalstack/quake-kube/internal/quake/content"
-	quakeserver "github.com/criticalstack/quake-kube/internal/quake/server"
-	httputil "github.com/criticalstack/quake-kube/internal/util/net/http"
-	"github.com/criticalstack/quake-kube/public"
+	quakeclient "github.com/lukaszraczylo/quake-kube/internal/quake/client"
+	"github.com/lukaszraczylo/quake-kube/internal/quake/content"
+	quakeserver "github.com/lukaszraczylo/quake-kube/internal/quake/server"
+	httputil "github.com/lukaszraczylo/quake-kube/internal/util/net/http"
+	"github.com/lukaszraczylo/quake-kube/public"
 )
 
 var opts struct {

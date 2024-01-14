@@ -5,10 +5,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	q3cmd "github.com/criticalstack/quake-kube/cmd/q3/app/cmd"
-	q3content "github.com/criticalstack/quake-kube/cmd/q3/app/content"
-	q3proxy "github.com/criticalstack/quake-kube/cmd/q3/app/proxy"
-	q3server "github.com/criticalstack/quake-kube/cmd/q3/app/server"
+	q3cmd "github.com/lukaszraczylo/quake-kube/cmd/q3/app/cmd"
+	q3content "github.com/lukaszraczylo/quake-kube/cmd/q3/app/content"
+	q3proxy "github.com/lukaszraczylo/quake-kube/cmd/q3/app/proxy"
+	q3server "github.com/lukaszraczylo/quake-kube/cmd/q3/app/server"
 )
 
 var global struct {

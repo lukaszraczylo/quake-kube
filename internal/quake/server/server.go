@@ -13,8 +13,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"sigs.k8s.io/yaml"
 
-	quakenet "github.com/criticalstack/quake-kube/internal/quake/net"
-	"github.com/criticalstack/quake-kube/internal/util/exec"
+	quakenet "github.com/lukaszraczylo/quake-kube/internal/quake/net"
+	"github.com/lukaszraczylo/quake-kube/internal/util/exec"
 )
 
 var (

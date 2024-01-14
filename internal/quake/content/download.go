@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	httputil "github.com/criticalstack/quake-kube/internal/util/net/http"
+	httputil "github.com/lukaszraczylo/quake-kube/internal/util/net/http"
 	"github.com/pkg/errors"
 )
 

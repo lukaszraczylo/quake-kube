@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	quakecontent "github.com/criticalstack/quake-kube/internal/quake/content"
+	quakecontent "github.com/lukaszraczylo/quake-kube/internal/quake/content"
 )
 
 var opts struct {
