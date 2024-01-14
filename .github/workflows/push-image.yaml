@@ -107,6 +107,6 @@ jobs:
         with:
           name: v${{ needs.prepare.outputs.DOCKER_IMAGE_SEMVER }}
           body_path: .release_notes
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GHCR_TOKEN }}
           tag_name: v${{ needs.prepare.outputs.DOCKER_IMAGE_SEMVER }}
           prerelease: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
