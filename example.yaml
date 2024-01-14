@@ -22,7 +22,7 @@ spec:
         - --config=/config/config.yaml
         - --content-server=http://127.0.0.1:9090
         - --agree-eula
-        image: docker.io/criticalstack/quake:latest
+        image: ghcr.io/lukaszraczylo/q3:latest
         name: server
         ports:
         - containerPort: 8080
@@ -40,7 +40,7 @@ spec:
         - q3
         - content
         - --seed-content-url=http://content.quakejs.com
-        image: docker.io/criticalstack/quake:latest
+        image: ghcr.io/lukaszraczylo/q3:latest
         name: content-server
         ports:
         - containerPort: 9090
