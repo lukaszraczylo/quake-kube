@@ -26,6 +26,14 @@ jobs:
           go mod tidy
       - name: Run tests
         run: go test ./...
+      - name: Check if there are any changes
+        run: |
+          git diff --exit-code
+          if [ $? -eq 0 ]
+          then
+            echo "No changes detected"
+            exit 1
+          fi
       - name: Commit changes
         run: |
           git config --local user.email "github@raczylo.com"
