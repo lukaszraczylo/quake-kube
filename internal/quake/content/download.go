@@ -40,9 +40,10 @@ func CopyAssets(u *url.URL, dir string) error {
 			return err
 		}
 		if strings.HasPrefix(f.Name, "linuxq3ademo") {
-			if err := extractDemoPack(path, dir); err != nil {
-				return err
-			}
+			continue
+			// if err := extractDemoPack(path, dir); err != nil {
+			// 	return err
+			// }
 		}
 		if strings.HasPrefix(f.Name, "linuxq3apoint") {
 			if err := extractPointPacks(path, dir); err != nil {

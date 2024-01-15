@@ -15199,7 +15199,8 @@ function copyTempDouble(ptr) {
   				return null;
   			}
   
-  			SYSC.Print('generated crc32 for ' + path + ' in ' + ((Date.now() - start) / 1000).toFixed(2) + ' seconds');
+        SYSC.Print('generated crc32 for ' + path + ' in ' + ((Date.now() - start) / 1000).toFixed(2) + ' seconds and crc is ' + crc);
+
   
   			Runtime.stackRestore(stack);
   			return CRC32.Finish(crc);
