@@ -34,7 +34,7 @@ func CopyAssets(u *url.URL, dir string) error {
 			return err
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			return err
+			continue
 		}
 		if err := ioutil.WriteFile(path, data, 0644); err != nil {
 			return err

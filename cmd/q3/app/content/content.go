@@ -56,8 +56,8 @@ func NewCommand() *cobra.Command {
 			s := &http.Server{
 				Addr:           opts.Addr,
 				Handler:        e,
-				ReadTimeout:    600 * time.Second,
-				WriteTimeout:   600 * time.Second,
+				ReadTimeout:    10240 * time.Second,
+				WriteTimeout:   10240 * time.Second,
 				MaxHeaderBytes: 1 << 20,
 			}
 			fmt.Printf("Starting server %s\n", opts.Addr)
