@@ -10,6 +10,8 @@ RUN go mod download
 ADD cmd cmd/
 ADD internal internal/
 ADD public public/
+COPY tools tools/
+RUN /usr/local/go/bin/go run ./tools/genstatic.go public public
 
 RUN CGO_ENABLED=0 GOOS=linux GO111MODULE=on taskset -c 1 /usr/local/go/bin/go build -a -o q3 ./cmd/q3
 
