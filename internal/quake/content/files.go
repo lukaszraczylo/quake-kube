@@ -14,17 +14,24 @@ type File struct {
 	Checksum   uint32 `json:"checksum"`
 }
 
+var assetsList = []*File{}
+
 func getAssets(dir string) (files []*File, err error) {
-	err = walk(dir, func(path string, info os.FileInfo, err error) error {
-		data, err := ioutil.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		n := crc32.ChecksumIEEE(data)
-		path = strings.TrimPrefix(path, dir+"/")
-		files = append(files, &File{path, info.Size(), n})
-		return nil
-	}, ".pk3", ".sh", ".run")
+	if len(assetsList) == 0 {
+		err = walk(dir, func(path string, info os.FileInfo, err error) error {
+			data, err := ioutil.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			n := crc32.ChecksumIEEE(data)
+			path = strings.TrimPrefix(path, dir+"/")
+			files = append(files, &File{path, info.Size(), n})
+			assetsList = files
+			return nil
+		}, ".pk3", ".sh", ".run")
+	} else {
+		files = assetsList
+	}
 	return
 }
 
