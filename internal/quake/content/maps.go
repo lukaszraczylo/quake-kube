@@ -12,21 +12,28 @@ type Map struct {
 	Name string `json:"name"`
 }
 
-func getMaps(dir string) (result []*Map, err error) {
-	err = walk(dir, func(path string, info os.FileInfo, err error) error {
-		mp, err := OpenMapPack(path)
-		if err != nil {
-			return err
-		}
-		defer mp.Close()
+var mapsList = []*Map{}
 
-		maps, err := mp.Maps()
-		if err != nil {
+func getMaps(dir string) (result []*Map, err error) {
+	if len(mapsList) == 0 {
+		err = walk(dir, func(path string, info os.FileInfo, err error) error {
+			mp, err := OpenMapPack(path)
+			if err != nil {
+				return err
+			}
+			defer mp.Close()
+
+			maps, err := mp.Maps()
+			if err != nil {
+				return err
+			}
+			result = append(result, maps...)
+			mapsList = result
 			return err
-		}
-		result = append(result, maps...)
-		return err
-	}, ".pk3")
+		}, ".pk3")
+	} else {
+		result = mapsList
+	}
 	return
 }
 

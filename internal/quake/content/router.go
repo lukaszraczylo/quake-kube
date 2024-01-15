@@ -18,6 +18,11 @@ type Config struct {
 }
 
 func NewRouter(cfg *Config) (*echo.Echo, error) {
+	// pre-generate assets manifest so its dynamic generation won't hammer the server
+	if _, err := getAssets(cfg.AssetsDir); err != nil {
+		return nil, err
+	}
+
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
