@@ -63,16 +63,6 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 
 	go func() {
 		for {
-			time.Sleep(30 * time.Second)
-			if err := ws.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Printf("wsproxy: ping error: %v", err)
-				return
-			}
-		}
-	}()
-
-	go func() {
-		for {
 			_, msg, err := ws.ReadMessage()
 			if err != nil {
 				m := websocket.FormatCloseMessage(websocket.CloseNormalClosure, fmt.Sprintf("%v", err))
