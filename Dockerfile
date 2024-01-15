@@ -7,9 +7,9 @@ ARG GOPROXY
 ARG GOSUMDB
 RUN go mod download
 
-COPY cmd cmd/
-COPY internal internal/
-COPY public public/
+ADD cmd cmd/
+ADD internal internal/
+ADD public public/
 
 RUN CGO_ENABLED=0 GOOS=linux GO111MODULE=on taskset -c 1 /usr/local/go/bin/go build -a -o q3 ./cmd/q3
 

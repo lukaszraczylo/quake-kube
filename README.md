@@ -1,4 +1,4 @@
-## This is maintained fork
+## This is maintained fork for the FULL version of Q3.
 
 This fork is maintained by Lukasz Raczylo, because everyone loves Q3 and if someone wants to play it, it should be easy and relatively safe to do so. I will try to keep updates of the containers and dependencies in check.
 
@@ -7,6 +7,21 @@ This fork is maintained by Lukasz Raczylo, because everyone loves Q3 and if some
 # QuakeKube
 
 QuakeKube is a Kubernetes-ified version of [QuakeJS](https://github.com/inolen/quakejs) that runs a dedicated [Quake 3](https://en.wikipedia.org/wiki/Quake_III_Arena) server in a Kubernetes Deployment, and then allow clients to connect via QuakeJS in the browser.
+
+## Changes
+
+- Obtain full version of Quake 3 Arena ( for example from Steam )
+- Deploy using persistent storage ( for example using NFS or Longhorn )
+- Unzip pk0.pk3 and run following commands to decrease size of pak0 ( remove music _and_ videos )
+  ```find music/ -type f -name "*.wav" -exec sh -c '> "{}"' \;```
+  ```find video/ -type f -name "*.RoQ" -exec sh -c '> "{}"' \;```
+- Zip it back into pak0.zip and rename it to pak0.pk3
+- Upload pak(0-8).pk3 into your content server storage, for example using `kubectl cp` command
+  `for i in {0..8}; do kubectl cp --retries=-1 pak$i.pk3 quake/quake-59cf97d767-d8867:/assets/baseq3/pak$i.pk3 -c content-server; done`
+
+In case of any CRC issues:
+- Start the deployment and head towards the exposed service, for example https://quake.lan/assets/manifest.json
+- Get the checksum of the pak0 file and udpate ./public/ioquake3.js part with appropriate checksum
 
 ## Quick start
 
