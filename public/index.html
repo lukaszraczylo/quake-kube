@@ -138,7 +138,7 @@
             if (!host.includes(":")) { host = host + (window.location.protocol == 'https:' ? ":443" : ":80") }
             var args = ['+set', 'fs_cdn', host, '+connect', host];
             args.push.apply(args, ['+set', 'cl_allowDownload', '1'])
-            args.push.apply(args, ['+set', 'cl_timeout', '15'])
+            args.push.apply(args, ['+set', 'cl_timeout', '300'])
             args.push.apply(args, ['+name', localStorage.playerName])
             args.push.apply(args, getQueryCommands());
             var inputPassword = document.getElementById("password");
