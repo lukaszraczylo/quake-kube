@@ -139,8 +139,19 @@
             var args = ['+set', 'fs_cdn', host, '+connect', host];
             args.push.apply(args, ['+set', 'cl_allowDownload', '1'])
             args.push.apply(args, ['+set', 'cl_timeout', '300'])
-            args.push.apply(args, ['+set', 'cg_fov', '"115"'])
-            args.push.apply(args, ['+set', 'cg_drawfps', '"1"'])
+            args.push.apply(args, ['+set', 'r_customwidth', '4096'])
+            args.push.apply(args, ['+set', 'r_customheight', '2160'])
+            args.push.apply(args, ['+set', 'cg_fov', '105'])
+            args.push.apply(args, ['+set', 'cg_drawfps', '0'])
+            args.push.apply(args, ['+set', 'r_picmip', '0'])
+            args.push.apply(args, ['+set', 'r_lodbias', '-2'])
+            args.push.apply(args, ['+set', 'r_hdr', '1'])
+            args.push.apply(args, ['+set', 'r_displayrefresh', '0'])
+            args.push.apply(args, ['+set', 'r_dynamiclight', '1'])
+            args.push.apply(args, ['+set', 'r_shadowFilter', '2'])
+            /* don't set dlight to 2 as it's broken */
+            args.push.apply(args, ['+set', 'r_flares', '1'])
+            args.push.apply(args, ['+set', 'r_subdivisions', '1'])
             args.push.apply(args, ['+name', localStorage.playerName])
             args.push.apply(args, getQueryCommands());
             var inputPassword = document.getElementById("password");
