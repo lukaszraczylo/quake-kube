@@ -155,6 +155,13 @@
             args.push.apply(args, ['+set', 'r_colorbits', '32'])
             args.push.apply(args, ['+set', 'r_texturebits', '32'])
 
+            args.push.apply(args, ['+set', 'r_ext_max_anisotropy', '16'])
+            args.push.apply(args, ['+set', 'r_ext_multisample', '4'])
+            args.push.apply(args, ['+set', 'r_ext_framebuffer_multisample', '4'])
+            args.push.apply(args, ['+set', 'r_ext_compressed_textures', '0'])
+            args.push.apply(args, ['+set', 'r_deluxeMapping', '1'])
+            args.push.apply(args, ['+set', 'com_hunkmegs', '128'])
+
             args.push.apply(args, ['+name', localStorage.playerName])
             args.push.apply(args, getQueryCommands());
             var inputPassword = document.getElementById("password");
