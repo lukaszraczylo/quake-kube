@@ -32,65 +32,24 @@
     <meta name="msapplication-TileImage" content="/images/ms-icon-144x144.png">
     <meta name="theme-color" content="#ffffff">
     <script type="text/javascript">
-      // Memory monitoring to prevent WebAssembly crashes
+      // Basic memory monitoring to prevent WebAssembly crashes (doesn't use websocket tracking)
       function monitorMemory() {
         if (Module && Module.HEAP8) {
           var bytesUsed = Module._emscripten_get_heap_size();
           var bytesTotal = Module.TOTAL_MEMORY;
           var percentUsed = (bytesUsed / bytesTotal * 100).toFixed(1);
           
-          console.log('Memory usage: ' + bytesUsed + ' / ' + bytesTotal + ' bytes (' + percentUsed + '%)');
-          
-          // Warning threshold at 85%
           if (percentUsed > 85) {
             console.warn('High memory usage! ' + percentUsed + '% of available memory is used');
           }
         }
-        setTimeout(monitorMemory, 30000); // Check every 30 seconds
+        setTimeout(monitorMemory, 60000); // Check every minute
       }
       
-      // WebSocket performance metrics for high-speed connections
-      if (window.performance && window.performance.mark) {
-        window.addEventListener('load', function() {
-          // Start memory monitoring after game loads
-          setTimeout(monitorMemory, 10000);
-          // Add performance tracking to WebSocket
-          (function() {
-            var oldWS = window.WebSocket;
-            window.WebSocket = function(url, protocols) {
-              var ws = new oldWS(url, protocols);
-              window.performance.mark('ws-created');
-              
-              ws.addEventListener('open', function() {
-                window.performance.mark('ws-opened');
-                window.performance.measure('ws-connection-time', 'ws-created', 'ws-opened');
-                console.log('WS Connection Time:', window.performance.getEntriesByName('ws-connection-time')[0].duration, 'ms');
-              });
-              
-              // Track message latency
-              var lastSent = 0;
-              var originalSend = ws.send;
-              ws.send = function(data) {
-                lastSent = performance.now();
-                window.performance.mark('ws-message-sent');
-                return originalSend.apply(this, arguments);
-              };
-              
-              var originalOnMessage = ws.onmessage;
-              ws.addEventListener('message', function() {
-                if (lastSent > 0) {
-                  var latency = performance.now() - lastSent;
-                  if (latency < 1000) { // Only log game traffic, not initial asset downloads
-                    console.log('WS RTT:', latency.toFixed(2), 'ms');
-                  }
-                }
-              });
-              
-              return ws;
-            };
-          })();
-        });
-      }
+      window.addEventListener('load', function() {
+        // Start memory monitoring after game loads
+        setTimeout(monitorMemory, 10000);
+      });
       
       function getQueryCommands() {
         var search = /([^&=]+)/g;
@@ -249,7 +208,9 @@
             args.push.apply(args, ['+set', 'net_noipx', '1']) // Disable unused protocols
             args.push.apply(args, ['+set', 'com_zoneMegs', '24']) // Reduced to avoid memory allocation issues
 
-            args.push.apply(args, ['+name', localStorage.playerName])
+            // Always use player name from form or fallback to localStorage
+            var playerName = (inputPlayerName.value !== "") ? inputPlayerName.value : localStorage.playerName;
+            args.push.apply(args, ['+name', playerName])
             args.push.apply(args, getQueryCommands());
             var inputPassword = document.getElementById("password");
             if (inputPassword && inputPassword.value != "") {
