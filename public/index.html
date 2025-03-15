@@ -22,6 +22,47 @@
     <meta name="msapplication-TileImage" content="/images/ms-icon-144x144.png">
     <meta name="theme-color" content="#ffffff">
     <script type="text/javascript">
+      // WebSocket performance metrics for high-speed connections
+      if (window.performance && window.performance.mark) {
+        window.addEventListener('load', function() {
+          // Add performance tracking to WebSocket
+          (function() {
+            var oldWS = window.WebSocket;
+            window.WebSocket = function(url, protocols) {
+              var ws = new oldWS(url, protocols);
+              window.performance.mark('ws-created');
+              
+              ws.addEventListener('open', function() {
+                window.performance.mark('ws-opened');
+                window.performance.measure('ws-connection-time', 'ws-created', 'ws-opened');
+                console.log('WS Connection Time:', window.performance.getEntriesByName('ws-connection-time')[0].duration, 'ms');
+              });
+              
+              // Track message latency
+              var lastSent = 0;
+              var originalSend = ws.send;
+              ws.send = function(data) {
+                lastSent = performance.now();
+                window.performance.mark('ws-message-sent');
+                return originalSend.apply(this, arguments);
+              };
+              
+              var originalOnMessage = ws.onmessage;
+              ws.addEventListener('message', function() {
+                if (lastSent > 0) {
+                  var latency = performance.now() - lastSent;
+                  if (latency < 1000) { // Only log game traffic, not initial asset downloads
+                    console.log('WS RTT:', latency.toFixed(2), 'ms');
+                  }
+                }
+              });
+              
+              return ws;
+            };
+          })();
+        });
+      }
+      
       function getQueryCommands() {
         var search = /([^&=]+)/g;
         var query  = window.location.search.substring(1);
@@ -137,8 +178,14 @@
             host = document.location.host
             if (!host.includes(":")) { host = host + (window.location.protocol == 'https:' ? ":443" : ":80") }
             var args = ['+set', 'fs_cdn', host, '+connect', host];
+            // Network optimization for 1Gbit connection
             args.push.apply(args, ['+set', 'cl_allowDownload', '1'])
-            args.push.apply(args, ['+set', 'cl_timeout', '300'])
+            args.push.apply(args, ['+set', 'cl_timeout', '120']) // Lower timeout for faster reconnection
+            args.push.apply(args, ['+set', 'rate', '100000']) // Increase rate for 1Gbit connection
+            args.push.apply(args, ['+set', 'snaps', '40']) // Increase update frequency
+            args.push.apply(args, ['+set', 'cl_maxpackets', '125']) // More client packets for smoother gameplay
+            args.push.apply(args, ['+set', 'cl_packetdup', '0']) // Disable packet duplication on reliable networks
+            args.push.apply(args, ['+set', 'com_maxfps', '250']) // Higher max FPS
             args.push.apply(args, ['+set', 'r_customwidth', '4096'])
             args.push.apply(args, ['+set', 'r_customheight', '2160'])
             args.push.apply(args, ['+set', 'cg_fov', '105'])
@@ -158,9 +205,17 @@
             args.push.apply(args, ['+set', 'r_ext_max_anisotropy', '16'])
             args.push.apply(args, ['+set', 'r_ext_multisample', '4'])
             args.push.apply(args, ['+set', 'r_ext_framebuffer_multisample', '4'])
-            args.push.apply(args, ['+set', 'r_ext_compressed_textures', '0'])
+            args.push.apply(args, ['+set', 'r_ext_compressed_textures', '1']) // Enable compression for faster loading on 1Gbit
             args.push.apply(args, ['+set', 'r_deluxeMapping', '1'])
-            args.push.apply(args, ['+set', 'com_hunkmegs', '128'])
+            args.push.apply(args, ['+set', 'com_hunkmegs', '256']) // Increase memory allocation for assets
+            
+            // Additional network optimizations for 1Gbit connection
+            args.push.apply(args, ['+set', 'cl_timenudge', '0']) // Optimal setting for high bandwidth
+            args.push.apply(args, ['+set', 'cg_predictItems', '1']) // Enable item prediction
+            args.push.apply(args, ['+set', 'cl_antilag', '1']) // Enable antilag
+            args.push.apply(args, ['+set', 'net_socksEnabled', '0']) // Disable SOCKS proxy for direct connection
+            args.push.apply(args, ['+set', 'net_noipx', '1']) // Disable unused protocols
+            args.push.apply(args, ['+set', 'com_zoneMegs', '64']) // Increase memory for network zone
 
             args.push.apply(args, ['+name', localStorage.playerName])
             args.push.apply(args, getQueryCommands());
