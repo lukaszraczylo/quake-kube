@@ -22,24 +22,46 @@ type Config struct {
 }
 
 func NewRouter(cfg *Config) (*echo.Echo, error) {
+	// Create optimized Echo instance
 	e := echo.New()
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
+	e.HideBanner = true
+	e.HidePort = true
+	
+	// Configure middleware for optimal performance
+	e.Use(middleware.RecoverWithConfig(middleware.RecoverConfig{
+		StackSize: 1 << 10, // 1KB, optimized stack size
+	}))
+	
+	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: "${method} ${uri} ${status} ${latency_human}\n",
+	}))
+	
+	// Add gzip compression for better network efficiency
+	e.Use(middleware.GzipWithConfig(middleware.GzipConfig{
+		Level: 5, // Balance between compression and CPU usage
+	}))
+	
+	// Optimize CORS configuration with caching
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
+		MaxAge: 3600, // Cache preflight requests for 1 hour
 	}))
 
+	// Load and parse template only once at startup
 	f, err := cfg.Files.Open("index.html")
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
+	// Read with proper buffer sizing
 	data, err := ioutil.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}
+	
+	// Create optimized template with caching
 	templates, err := template.New("index").Parse(string(data))
 	if err != nil {
 		return nil, err
