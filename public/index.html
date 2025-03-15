@@ -3,6 +3,16 @@
   <head>
     <title>QuakeJS Local</title>
     <link rel="stylesheet" href="game.css"></link>
+    <script type="text/javascript">
+      // Configure WebAssembly memory before loading the main script
+      // This sets up 384MB of memory (instead of default ~234MB)
+      var Module = {
+        TOTAL_MEMORY: 384 * 1024 * 1024,
+        printErr: function(text) { console.error(text); },
+        canvas: null,
+        setStatus: function(text) { console.log(text); }
+      };
+    </script>
     <script type="text/javascript" src="ioquake3.js"></script>
     <link rel="apple-touch-icon" sizes="57x57" href="/images/apple-icon-57x57.png">
     <link rel="apple-touch-icon" sizes="60x60" href="/images/apple-icon-60x60.png">
@@ -22,9 +32,28 @@
     <meta name="msapplication-TileImage" content="/images/ms-icon-144x144.png">
     <meta name="theme-color" content="#ffffff">
     <script type="text/javascript">
+      // Memory monitoring to prevent WebAssembly crashes
+      function monitorMemory() {
+        if (Module && Module.HEAP8) {
+          var bytesUsed = Module._emscripten_get_heap_size();
+          var bytesTotal = Module.TOTAL_MEMORY;
+          var percentUsed = (bytesUsed / bytesTotal * 100).toFixed(1);
+          
+          console.log('Memory usage: ' + bytesUsed + ' / ' + bytesTotal + ' bytes (' + percentUsed + '%)');
+          
+          // Warning threshold at 85%
+          if (percentUsed > 85) {
+            console.warn('High memory usage! ' + percentUsed + '% of available memory is used');
+          }
+        }
+        setTimeout(monitorMemory, 30000); // Check every 30 seconds
+      }
+      
       // WebSocket performance metrics for high-speed connections
       if (window.performance && window.performance.mark) {
         window.addEventListener('load', function() {
+          // Start memory monitoring after game loads
+          setTimeout(monitorMemory, 10000);
           // Add performance tracking to WebSocket
           (function() {
             var oldWS = window.WebSocket;
@@ -203,11 +232,14 @@
             args.push.apply(args, ['+set', 'r_texturebits', '32'])
 
             args.push.apply(args, ['+set', 'r_ext_max_anisotropy', '16'])
-            args.push.apply(args, ['+set', 'r_ext_multisample', '4'])
-            args.push.apply(args, ['+set', 'r_ext_framebuffer_multisample', '4'])
+            args.push.apply(args, ['+set', 'r_ext_multisample', '2']) // Reduced from 4 to lower memory usage
+            args.push.apply(args, ['+set', 'r_ext_framebuffer_multisample', '2']) // Reduced from 4 to lower memory usage
             args.push.apply(args, ['+set', 'r_ext_compressed_textures', '1']) // Enable compression for faster loading on 1Gbit
+            args.push.apply(args, ['+set', 'r_textureMode', 'GL_LINEAR_MIPMAP_LINEAR']) // Best texture filtering
+            args.push.apply(args, ['+set', 'r_finish', '0']) // Disable synchronous rendering for better performance
+            args.push.apply(args, ['+set', 'r_swapInterval', '0']) // Disable vsync for lower latency
             args.push.apply(args, ['+set', 'r_deluxeMapping', '1'])
-            args.push.apply(args, ['+set', 'com_hunkmegs', '256']) // Increase memory allocation for assets
+            args.push.apply(args, ['+set', 'com_hunkmegs', '96']) // Reduced to avoid memory allocation issues
             
             // Additional network optimizations for 1Gbit connection
             args.push.apply(args, ['+set', 'cl_timenudge', '0']) // Optimal setting for high bandwidth
@@ -215,7 +247,7 @@
             args.push.apply(args, ['+set', 'cl_antilag', '1']) // Enable antilag
             args.push.apply(args, ['+set', 'net_socksEnabled', '0']) // Disable SOCKS proxy for direct connection
             args.push.apply(args, ['+set', 'net_noipx', '1']) // Disable unused protocols
-            args.push.apply(args, ['+set', 'com_zoneMegs', '64']) // Increase memory for network zone
+            args.push.apply(args, ['+set', 'com_zoneMegs', '24']) // Reduced to avoid memory allocation issues
 
             args.push.apply(args, ['+name', localStorage.playerName])
             args.push.apply(args, getQueryCommands());
