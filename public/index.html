@@ -214,7 +214,7 @@
             // Always use player name from form or fallback to localStorage
             var playerName = (inputPlayerName.value !== "") ? inputPlayerName.value : localStorage.playerName;
             console.log('Debug: playerName = ' + playerName);
-            args.push.apply(args, ['+name', playerName])
+            args.push.apply(args, ['+set', 'name', playerName])
             args.push.apply(args, getQueryCommands());
             var inputPassword = document.getElementById("password");
             if (inputPassword && inputPassword.value != "") {
