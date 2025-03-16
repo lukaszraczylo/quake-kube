@@ -224,7 +224,7 @@
 
             // Ensure the name is properly passed to the game engine
             // We're guaranteed to have a value in localStorage now
-            args.push.apply(args, ['+name', localStorage.playerName || 'Player_' + Math.floor(Math.random() * 1000)]);
+            args.push.apply(args, ['+set', 'name', localStorage.playerName || 'Player_' + Math.floor(Math.random() * 1000)]);
             args.push.apply(args, getQueryCommands());
             var inputPassword = document.getElementById("password");
             if (inputPassword && inputPassword.value != "") {
