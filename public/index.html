@@ -154,17 +154,28 @@
         </form>
         <script type="text/javascript">
           placeholder = "enter player name"
+          // If we have a stored name, use it for both placeholder and value
           if (localStorage.playerName) {
             placeholder = localStorage.playerName
+            // Pre-fill the input field with stored name
+            setTimeout(function() {
+              document.getElementById("playerName").value = localStorage.playerName
+            }, 0)
           }
           document.getElementById("playerName").placeholder = placeholder
           function join(){
             var inputPlayerName = document.getElementById("playerName");
+            // Update localStorage when input field has value
             if (inputPlayerName.value != "") {
                localStorage.setItem("playerName", inputPlayerName.value);
                console.log("Player name set to " + inputPlayerName.value);
+            } else if (localStorage.playerName) {
+               // Use existing name in localStorage if input is empty
+               console.log("Using existing player name: " + localStorage.playerName);
             } else {
-                console.log("Player name not set - ignoring");
+               // No name provided and nothing in storage - use default
+               localStorage.setItem("playerName", "Player_" + Math.floor(Math.random() * 1000));
+               console.log("Using default player name: " + localStorage.playerName);
             }
             host = document.location.host
             if (!host.includes(":")) { host = host + (window.location.protocol == 'https:' ? ":443" : ":80") }
@@ -211,7 +222,9 @@
             args.push.apply(args, ['+set', 'net_noipx', '1']) // Disable unused protocols
             args.push.apply(args, ['+set', 'com_zoneMegs', '24']) // Reduced to avoid memory allocation issues
 
-            args.push.apply(args, ['+name', localStorage.playerName])
+            // Ensure the name is properly passed to the game engine
+            // We're guaranteed to have a value in localStorage now
+            args.push.apply(args, ['+name', localStorage.playerName || 'Player_' + Math.floor(Math.random() * 1000)]);
             args.push.apply(args, getQueryCommands());
             var inputPassword = document.getElementById("password");
             if (inputPassword && inputPassword.value != "") {
