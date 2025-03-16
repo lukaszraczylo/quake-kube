@@ -174,12 +174,30 @@
                console.log("Using existing player name: " + localStorage.playerName);
             } else {
                // No name provided and nothing in storage - use default
-               localStorage.setItem("playerName", "Player_" + Math.floor(Math.random() * 1000));
-               console.log("Using default player name: " + localStorage.playerName);
+               var defaultName = "Player_" + Math.floor(Math.random() * 1000);
+               localStorage.setItem("playerName", defaultName);
+               console.log("Using default player name: " + defaultName);
             }
+            
+            // Get the final player name that will be used
+            var finalPlayerName = localStorage.playerName;
+            console.log("Final player name for connection: " + finalPlayerName);
+            
             host = document.location.host
             if (!host.includes(":")) { host = host + (window.location.protocol == 'https:' ? ":443" : ":80") }
-            var args = ['+set', 'fs_cdn', host, '+connect', host];
+            
+            // Add more extensive name setting with multiple approaches to ensure it works
+            var args = [
+                // Player name settings - we set this in multiple ways for compatibility
+                '+set', 'name', finalPlayerName,
+                '+name', finalPlayerName,  // Legacy format as fallback
+                '+set', 'cl_name', finalPlayerName, // Alternative setting used by some mods
+                '+set', 'fs_cdn', host,
+                '+connect', host
+            ];
+            
+            // Log the final arguments for debugging
+            console.log("Setting player name with multiple methods to ensure proper registration");
             // Network optimization for 1Gbit connection
             args.push.apply(args, ['+set', 'cl_allowDownload', '1'])
             args.push.apply(args, ['+set', 'cl_timeout', '120']) // Lower timeout for faster reconnection
@@ -222,9 +240,7 @@
             args.push.apply(args, ['+set', 'net_noipx', '1']) // Disable unused protocols
             args.push.apply(args, ['+set', 'com_zoneMegs', '24']) // Reduced to avoid memory allocation issues
 
-            // Ensure the name is properly passed to the game engine
-            // We're guaranteed to have a value in localStorage now
-            args.push.apply(args, ['+set', 'name', localStorage.playerName || 'Player_' + Math.floor(Math.random() * 1000)]);
+            // Name is already set at the beginning of args array
             args.push.apply(args, getQueryCommands());
             var inputPassword = document.getElementById("password");
             if (inputPassword && inputPassword.value != "") {
