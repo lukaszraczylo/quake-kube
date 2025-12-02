@@ -1,4 +1,4 @@
-FROM golang:1 as builder
+FROM golang:1 AS builder
 
 WORKDIR /workspace
 COPY go.mod go.mod
@@ -15,14 +15,22 @@ RUN /usr/local/go/bin/go run ./tools/genstatic.go public public
 
 RUN CGO_ENABLED=0 GOOS=linux GO111MODULE=on taskset -c 1 /usr/local/go/bin/go build -a -o q3 ./cmd/q3
 
-FROM alpine:3 as quake-n-bake
+FROM alpine:3 AS quake-n-bake
 
-RUN apk add --no-cache git gcc make libc-dev
-RUN git clone https://github.com/ioquake/ioq3
-RUN cd /ioq3 && make BUILD_MISSIONPACK=0 BUILD_BASEGAME=0 BUILD_CLIENT=0 BUILD_SERVER=1 BUILD_GAME_SO=0 BUILD_GAME_QVM=0 BUILD_RENDERER_OPENGL2=0 BUILD_STANDALONE=1
-# Note: the find command is used to find the ioq3ded binary, which the name of can vary depending on the build architecture.
-# Unfortunately with the previous command the binary for arm64 was not found as it was looking for aarch64 instead of arm64 due 
-# to the makefile setup in ioq3 repository.
+RUN apk add --no-cache git gcc g++ make cmake musl-dev linux-headers
+RUN git clone --depth 1 https://github.com/ioquake/ioq3 && \
+    cd /ioq3 && \
+    cmake -S . -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_CLIENT=OFF \
+        -DBUILD_SERVER=ON \
+        -DBUILD_GAME=OFF \
+        -DBUILD_MISSIONPACK=OFF \
+        -DBUILD_BASEGAME=OFF \
+        -DBUILD_RENDERER_OPENGL2=OFF \
+        -DBUILD_STANDALONE=ON && \
+    cmake --build build --parallel
+# Find and copy the dedicated server binary
 RUN find /ioq3/build/ -type f -name "ioq3ded*" -exec cp {} /usr/local/bin/ioq3ded \;
 
 FROM alpine:3
