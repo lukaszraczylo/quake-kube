@@ -3,9 +3,10 @@ package client
 import (
 	"html/template"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
+	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -21,31 +22,71 @@ type Config struct {
 	Files http.FileSystem
 }
 
+// serverInfoCache caches server info to avoid blocking on slow/unresponsive server
+type serverInfoCache struct {
+	sync.RWMutex
+	info      map[string]string
+	lastFetch time.Time
+	ttl       time.Duration
+}
+
+var infoCache = &serverInfoCache{
+	ttl: 5 * time.Second, // Cache for 5 seconds
+}
+
+// getInfoCached returns cached info or fetches new info with short timeout
+func (c *serverInfoCache) getInfoCached(addr string) (map[string]string, bool) {
+	c.RLock()
+	if c.info != nil && time.Since(c.lastFetch) < c.ttl {
+		info := c.info
+		c.RUnlock()
+		return info, true
+	}
+	c.RUnlock()
+
+	// Try to fetch with short timeout, don't block if server is busy
+	info, err := quakenet.GetInfo(addr)
+	if err != nil {
+		// Return cached info even if stale, or nil if no cache
+		c.RLock()
+		defer c.RUnlock()
+		return c.info, c.info != nil
+	}
+
+	// Update cache
+	c.Lock()
+	c.info = info
+	c.lastFetch = time.Now()
+	c.Unlock()
+
+	return info, true
+}
+
 func NewRouter(cfg *Config) (*echo.Echo, error) {
 	// Create optimized Echo instance
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
-	
+
 	// Configure middleware for optimal performance
 	e.Use(middleware.RecoverWithConfig(middleware.RecoverConfig{
 		StackSize: 1 << 10, // 1KB, optimized stack size
 	}))
-	
+
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: "${method} ${uri} ${status} ${latency_human}\n",
 	}))
-	
+
 	// Add gzip compression for better network efficiency
 	e.Use(middleware.GzipWithConfig(middleware.GzipConfig{
 		Level: 5, // Balance between compression and CPU usage
 	}))
-	
+
 	// Optimize CORS configuration with caching
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
-		MaxAge: 3600, // Cache preflight requests for 1 hour
+		MaxAge:       3600, // Cache preflight requests for 1 hour
 	}))
 
 	// Load and parse template only once at startup
@@ -56,11 +97,11 @@ func NewRouter(cfg *Config) (*echo.Echo, error) {
 	defer f.Close()
 
 	// Read with proper buffer sizing
-	data, err := ioutil.ReadAll(f)
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Create optimized template with caching
 	templates, err := template.New("index").Parse(string(data))
 	if err != nil {
@@ -68,15 +109,14 @@ func NewRouter(cfg *Config) (*echo.Echo, error) {
 	}
 	e.Renderer = &TemplateRenderer{templates}
 
-	// default route
+	// default route - resilient to server unavailability
 	e.GET("/", func(c echo.Context) error {
-		m, err := quakenet.GetInfo(cfg.ServerAddr)
-		if err != nil {
-			return err
-		}
+		// Use cached info - never block the page load
+		m, _ := infoCache.getInfoCached(cfg.ServerAddr)
+
 		needsPass := false
-		if v, ok := m["g_needpass"]; ok {
-			if v == "1" {
+		if m != nil {
+			if v, ok := m["g_needpass"]; ok && v == "1" {
 				needsPass = true
 			}
 		}

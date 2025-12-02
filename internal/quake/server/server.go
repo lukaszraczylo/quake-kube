@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -51,13 +50,13 @@ func (s *Server) Start(ctx context.Context) error {
 	if s.Addr == "" {
 		s.Addr = "0.0.0.0:27960"
 	}
-	
+
 	// Parse address once
 	host, port, err := net.SplitHostPort(s.Addr)
 	if err != nil {
 		return err
 	}
-	
+
 	// Pre-allocate command arguments with proper capacity
 	args := make([]string, 0, 16) // Optimize initial capacity
 	args = append(args,
@@ -69,11 +68,11 @@ func (s *Server) Start(ctx context.Context) error {
 		"+set", "com_gamename", "Quake3Arena",
 		"+exec", "server.cfg",
 	)
-	
+
 	// Create command with context for proper cancellation handling
 	cmd := exec.CommandContext(ctx, "ioq3ded", args...)
 	cmd.Dir = s.Dir
-	
+
 	// Use buffered output for better performance
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -84,7 +83,7 @@ func (s *Server) Start(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := ioutil.WriteFile(filepath.Join(s.Dir, "baseq3/server.cfg"), data, 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(s.Dir, "baseq3/server.cfg"), data, 0644); err != nil {
 			return err
 		}
 		if err := cmd.Start(); err != nil {
@@ -113,19 +112,19 @@ func (s *Server) Start(ctx context.Context) error {
 		if net.ParseIP(host).IsUnspecified() {
 			addr = net.JoinHostPort("127.0.0.1", port)
 		}
-		
+
 		// Adaptive polling frequency - start with 5s
 		pollInterval := 5 * time.Second
-		minInterval := 2 * time.Second   // Minimum interval for high traffic
-		maxInterval := 15 * time.Second  // Maximum interval for no players
-		
+		minInterval := 2 * time.Second  // Minimum interval for high traffic
+		maxInterval := 15 * time.Second // Maximum interval for no players
+
 		// Use a ticker for regular polling
 		tick := time.NewTicker(pollInterval)
 		defer tick.Stop()
-		
+
 		// Track player counts to adjust polling frequency
 		var lastPlayerCount int
-		
+
 		for {
 			select {
 			case <-tick.C:
@@ -135,11 +134,11 @@ func (s *Server) Start(ctx context.Context) error {
 					log.Printf("metrics: get status failed %v", err)
 					continue
 				}
-				
+
 				// Update player count metric
 				currentPlayerCount := len(status.Players)
 				actrvePlayers.Set(float64(currentPlayerCount))
-				
+
 				// Set player-specific metrics more efficiently
 				for _, p := range status.Players {
 					if mapname, ok := status.Configuration["mapname"]; ok {
@@ -147,19 +146,19 @@ func (s *Server) Start(ctx context.Context) error {
 					}
 					pings.WithLabelValues(p.Name).Set(float64(p.Ping))
 				}
-				
+
 				// Adjust polling frequency based on player activity
 				// More players = more frequent updates
 				if currentPlayerCount > 0 {
 					// More players need more frequent updates
-					newInterval := maxInterval - time.Duration(currentPlayerCount) * time.Second
+					newInterval := maxInterval - time.Duration(currentPlayerCount)*time.Second
 					if newInterval < minInterval {
 						newInterval = minInterval
 					}
-					
+
 					// Only change ticker if interval changed significantly
 					if newInterval != pollInterval &&
-					   (newInterval < pollInterval-time.Second || newInterval > pollInterval+time.Second) {
+						(newInterval < pollInterval-time.Second || newInterval > pollInterval+time.Second) {
 						pollInterval = newInterval
 						tick.Reset(pollInterval)
 					}
@@ -168,9 +167,9 @@ func (s *Server) Start(ctx context.Context) error {
 					pollInterval = maxInterval
 					tick.Reset(pollInterval)
 				}
-				
+
 				lastPlayerCount = currentPlayerCount
-				
+
 			case <-ctx.Done():
 				return
 			}
@@ -206,30 +205,30 @@ func (s *Server) Start(ctx context.Context) error {
 // reload optimized for better performance
 func (s *Server) reload() error {
 	// Read with better error details
-	data, err := ioutil.ReadFile(s.ConfigFile)
+	data, err := os.ReadFile(s.ConfigFile)
 	if err != nil {
 		return err
 	}
-	
+
 	// Pre-allocate config with defaults
 	cfg := Default()
-	
+
 	// Single unmarshal operation
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return err
 	}
-	
+
 	// Marshal with optimized memory handling
 	data, err = cfg.Marshal()
 	if err != nil {
 		return err
 	}
-	
+
 	// Create target path only once
 	targetPath := filepath.Join(s.Dir, "baseq3/server.cfg")
-	
+
 	// Write with atomic guarantee on most filesystems
-	return ioutil.WriteFile(targetPath, data, 0644)
+	return os.WriteFile(targetPath, data, 0644)
 }
 
 // watch monitors config file for changes with optimized performance
@@ -238,7 +237,7 @@ func (s *Server) watch(ctx context.Context) (<-chan struct{}, error) {
 	if s.WatchInterval == 0 {
 		s.WatchInterval = 15 * time.Second
 	}
-	
+
 	// Get initial file info once
 	cur, err := os.Stat(s.ConfigFile)
 	if err != nil {
@@ -253,10 +252,10 @@ func (s *Server) watch(ctx context.Context) (<-chan struct{}, error) {
 		// Create ticker with adaptive interval
 		ticker := time.NewTicker(s.WatchInterval)
 		defer ticker.Stop()
-		
+
 		// Cache path to avoid repeated allocations
 		configPath := s.ConfigFile
-		
+
 		// Cache last mod time for faster comparison
 		lastMod := cur.ModTime()
 
@@ -276,7 +275,7 @@ func (s *Server) watch(ctx context.Context) (<-chan struct{}, error) {
 							// Channel full, skip this update (prevents blocking)
 							log.Println("Config reload signal skipped - channel full")
 						}
-						
+
 						// Update last modified time
 						lastMod = curMod
 					}

@@ -85,6 +85,6 @@ func TestConfigMarshal(t *testing.T) {
 	}
 	fmt.Printf("%s\n", data)
 	if diff := cmp.Diff(string(data), expectedConfig); diff != "" {
-		t.Fatalf(diff)
+		t.Fatalf("unexpected diff: %s", diff)
 	}
 }

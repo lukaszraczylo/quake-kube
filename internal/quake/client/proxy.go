@@ -16,17 +16,22 @@ import (
 
 // Optimized buffer sizes for gaming traffic patterns
 const (
-	// Increased buffer size for better throughput with game packets
-	bufferSize = 16384 // 16KB for better performance with larger packets
-	
+	// Quake 3 max packet size is ~1400 bytes, use 2KB for safety
+	bufferSize = 2048
+
 	// Number of buffers to preallocate at startup
-	preallocBufferCount = 64
+	preallocBufferCount = 128
 )
+
+// buffer wraps a byte slice for pool usage (pointer type to avoid allocations)
+type buffer struct {
+	data []byte
+}
 
 // Pre-warm the buffer pool with buffers to eliminate allocation spikes during gameplay
 var bufferPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, bufferSize)
+		return &buffer{data: make([]byte, bufferSize)}
 	},
 }
 
@@ -34,19 +39,18 @@ var bufferPool = sync.Pool{
 func init() {
 	// Pre-allocate buffers to reduce GC pressure during high-traffic periods
 	for i := 0; i < preallocBufferCount; i++ {
-		bufferPool.Put(make([]byte, bufferSize))
+		bufferPool.Put(&buffer{data: make([]byte, bufferSize)})
 	}
 }
 
 // Optimized WebSocket upgrader with performance-focused configuration
 var DefaultUpgrader = &websocket.Upgrader{
-	ReadBufferSize:  32768,  // 32KB for better read performance
-	WriteBufferSize: 32768,  // 32KB for better write performance
+	ReadBufferSize:  4096, // 4KB - sufficient for Quake packets
+	WriteBufferSize: 4096, // 4KB - sufficient for Quake packets
 	CheckOrigin: func(r *http.Request) bool {
 		return true // Required for cross-origin support
 	},
 	// Disable compression for lower CPU usage and better latency
-	// Game packets are often already compressed or binary data
 	EnableCompression: false,
 }
 
@@ -75,16 +79,16 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 	if w.Upgrader == nil {
 		upgrader = DefaultUpgrader
 	}
-	
+
 	// Preserve protocol headers for protocol compliance
 	upgradeHeader := http.Header{}
 	if hdr := req.Header.Get("Sec-Websocket-Protocol"); hdr != "" {
 		upgradeHeader.Set("Sec-Websocket-Protocol", hdr)
 	}
-	
+
 	// Add performance-oriented headers
 	upgradeHeader.Set("X-Content-Type-Options", "nosniff") // Prevent MIME sniffing
-	
+
 	// Upgrade with error handling
 	ws, err := upgrader.Upgrade(rw, req, upgradeHeader)
 	if err != nil {
@@ -92,14 +96,14 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		return
 	}
 	defer ws.Close()
-	
+
 	// Set optimal websocket options for gaming traffic
-	ws.SetReadLimit(65536) // 64KB max message size for security
+	ws.SetReadLimit(65536)                               // 64KB max message size for security
 	ws.SetPongHandler(func(string) error { return nil }) // Fast no-op pong handler
-	
+
 	// Configure WS to not use compression for binary game data
 	ws.EnableWriteCompression(false)
-	
+
 	// Create UDP backend with optimized buffer sizes
 	udpConfig := net.ListenConfig{
 		// Set control function for socket options
@@ -112,7 +116,7 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 			})
 		},
 	}
-	
+
 	// Create high-performance UDP listener
 	backend, err := udpConfig.ListenPacket(ctx, "udp", "0.0.0.0:0")
 	if err != nil {
@@ -120,28 +124,28 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		return
 	}
 	defer backend.Close()
-	
+
 	// Buffered error channel to prevent blocking
 	errc := make(chan error, 2)
-	
+
 	// Signal for graceful shutdown
 	done := make(chan struct{})
 	defer close(done)
 
 	// Cached values for better performance
 	portPrefix := []byte("\xff\xff\xff\xffport")
-	
+
 	// Disable read deadline for long-running connections
 	if err := ws.SetReadDeadline(time.Time{}); err != nil {
 		errc <- err
 		return
 	}
-	
+
 	// Enable keepalive for web socket connection
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ticker.C:
@@ -154,7 +158,7 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 			}
 		}
 	}()
-	
+
 	// WS to UDP direction - optimized for gaming traffic
 	go func() {
 		// Defer recovery from panics
@@ -163,7 +167,7 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 				errc <- fmt.Errorf("panic in ws reader: %v", r)
 			}
 		}()
-		
+
 		for {
 			// Most efficient message reading method
 			_, msg, err := ws.ReadMessage()
@@ -180,18 +184,18 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 				ws.WriteMessage(websocket.CloseMessage, m)
 				return
 			}
-			
+
 			// Fast prefix check for special messages using direct comparison
 			if len(msg) >= 8 && bytes.Equal(msg[:8], portPrefix) {
 				continue
 			}
-			
+
 			// Short write deadline for better throughput
 			if err := backend.SetWriteDeadline(time.Now().Add(2 * time.Second)); err != nil {
 				errc <- err
 				return
 			}
-			
+
 			// Zero-copy write directly to UDP
 			_, err = backend.WriteTo(msg, w.addr)
 			if err != nil {
@@ -200,7 +204,7 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 			}
 		}
 	}()
-	
+
 	// UDP to WS direction - optimized for maximum throughput
 	go func() {
 		// Defer recovery from panics
@@ -209,38 +213,37 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 				errc <- fmt.Errorf("panic in udp reader: %v", r)
 			}
 		}()
-		
+
 		for {
 			// Get buffer from pool for zero-allocation reading
-			bufInterface := bufferPool.Get()
-			buffer := bufInterface.([]byte)
-			
-			// Read from UDP socket with deadline
-			if err := backend.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
-				bufferPool.Put(bufInterface)
+			buf := bufferPool.Get().(*buffer)
+
+			// Read from UDP socket - no deadline for game traffic, rely on context cancellation
+			if err := backend.SetReadDeadline(time.Time{}); err != nil {
+				bufferPool.Put(buf)
 				errc <- err
 				return
 			}
-			
-			n, _, err := backend.ReadFrom(buffer)
+
+			n, _, err := backend.ReadFrom(buf.data)
 			if err != nil {
-				bufferPool.Put(bufInterface)
+				bufferPool.Put(buf)
 				errc <- err
 				return
 			}
-			
+
 			// Write directly to websocket from the buffer slice
-			if err := ws.WriteMessage(websocket.BinaryMessage, buffer[:n]); err != nil {
-				bufferPool.Put(bufInterface)
+			if err := ws.WriteMessage(websocket.BinaryMessage, buf.data[:n]); err != nil {
+				bufferPool.Put(buf)
 				errc <- err
 				return
 			}
-			
+
 			// Return buffer to pool
-			bufferPool.Put(bufInterface)
+			bufferPool.Put(buf)
 		}
 	}()
-	
+
 	// Wait for any goroutine to signal completion
 	select {
 	case err := <-errc:

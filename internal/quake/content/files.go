@@ -2,7 +2,6 @@ package content
 
 import (
 	"hash/crc32"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,8 +17,8 @@ var assetsList = []*File{}
 
 func getAssets(dir string) (files []*File, err error) {
 	if len(assetsList) == 0 {
-		err = walk(dir, func(path string, info os.FileInfo, err error) error {
-			data, err := ioutil.ReadFile(path)
+		err = walk(dir, func(path string, info os.FileInfo, _ error) error {
+			data, err := os.ReadFile(path)
 			if err != nil {
 				return err
 			}

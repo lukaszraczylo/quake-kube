@@ -16,7 +16,7 @@ var mapsList = []*Map{}
 
 func getMaps(dir string) (result []*Map, err error) {
 	if len(mapsList) == 0 {
-		err = walk(dir, func(path string, info os.FileInfo, err error) error {
+		err = walk(dir, func(path string, _ os.FileInfo, _ error) error {
 			mp, err := OpenMapPack(path)
 			if err != nil {
 				return err
