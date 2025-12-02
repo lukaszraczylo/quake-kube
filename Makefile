@@ -9,8 +9,9 @@ q3: gen
 gen: ## Generate and embed templates
 	@go run tools/genstatic.go public public
 
-VERSION ?= latest
-IMAGE   ?= ghcr.io/lukaszraczylo/q3:$(VERSION)
+VERSION ?= $(shell semver-gen generate -l 2>/dev/null | awk '{print $$2}' || echo "latest")
+IMAGE_BASE ?= ghcr.io/lukaszraczylo/q3
+IMAGE   ?= $(IMAGE_BASE):$(VERSION)
 
 .PHONY: build
 build:
@@ -18,7 +19,7 @@ build:
 
 .PHONY: buildx
 buildx:
-	@docker buildx build . --platform=linux/amd64,linux/arm64 --progress=plain -t $(IMAGE) --push
+	@docker buildx build . --platform=linux/amd64,linux/arm64 --progress=plain -t $(IMAGE) -t $(IMAGE_BASE):latest --push
 
 .PHONY: test
 test:
