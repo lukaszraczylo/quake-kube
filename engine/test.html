@@ -1,0 +1,20 @@
+<!DOCTYPE html><meta charset="utf-8"><title>ioq3 upstream wasm spike</title>
+<style>html,body{margin:0;height:100%;background:#000}canvas{width:100%;height:100%}</style>
+<canvas id=canvas></canvas>
+<script type=module>
+const p = new URLSearchParams(location.search);
+const files = [["baseq3/pak0.pk3","/baseq3"],["baseq3/pak1.pk3","/baseq3"],["baseq3/pak2.pk3","/baseq3"],["baseq3/pak3.pk3","/baseq3"],["baseq3/pak4.pk3","/baseq3"],["baseq3/pak5.pk3","/baseq3"],["baseq3/pak6.pk3","/baseq3"],["baseq3/pak7.pk3","/baseq3"],["baseq3/pak8.pk3","/baseq3"]];
+const wsurl = p.get('ws') || 'ws://127.0.0.1:18097/';
+const args = ['+set','net_enabled','1','+set','r_mode','-2','+set','com_basegame','baseq3','+set','com_gamename','Quake3Arena','+set','name',p.get('name')||'spike','+connect',p.get('connect')||'127.0.0.1:27960'];
+window.logs = [];
+const ioquake3 = (await import('./ioquake3.js')).default;
+ioquake3({
+  canvas, arguments: args, websocket: { url: wsurl },
+  print: t => window.logs.push(t), printErr: t => window.logs.push('ERR '+t),
+  preRun: [async m => {
+    m.addRunDependency('fs');
+    try { for (const [src,dst] of files) { const r = await fetch(src); if(!r.ok) continue; m.FS.mkdirTree(dst); m.FS.writeFile(dst+'/'+src.split('/').pop(), new Uint8Array(await r.arrayBuffer())); } }
+    finally { m.removeRunDependency('fs'); }
+  }],
+}).then(m => { window.mod = m; });
+</script>
