@@ -34,25 +34,6 @@
     <meta name="msapplication-TileImage" content="/images/ms-icon-144x144.png">
     <meta name="theme-color" content="#000000">
     <script type="text/javascript">
-      // Basic memory monitoring to prevent WebAssembly crashes (doesn't use websocket tracking)
-      function monitorMemory() {
-        if (Module && Module.HEAP8) {
-          var bytesUsed = Module._emscripten_get_heap_size();
-          var bytesTotal = Module.TOTAL_MEMORY;
-          var percentUsed = (bytesUsed / bytesTotal * 100).toFixed(1);
-          
-          if (percentUsed > 85) {
-            console.warn('High memory usage! ' + percentUsed + '% of available memory is used');
-          }
-        }
-        setTimeout(monitorMemory, 60000); // Check every minute
-      }
-      
-      window.addEventListener('load', function() {
-        // Start memory monitoring after game loads
-        setTimeout(monitorMemory, 10000);
-      });
-      
       function getQueryCommands() {
         var search = /([^&=]+)/g;
         var query  = window.location.search.substring(1);
@@ -235,7 +216,6 @@
                 // Player name settings - we set this in multiple ways for compatibility
                 '+set', 'name', finalPlayerName,
                 '+name', finalPlayerName,  // Legacy format as fallback
-                '+set', 'cl_name', finalPlayerName, // Alternative setting used by some mods
                 '+set', 'fs_cdn', host,
                 '+connect', host
             ];
@@ -257,7 +237,6 @@
             args.push.apply(args, ['+set', 'r_picmip', '0'])
             args.push.apply(args, ['+set', 'r_lodbias', '-2'])
             args.push.apply(args, ['+set', 'r_hdr', '1'])
-            args.push.apply(args, ['+set', 'r_displayrefresh', '0'])
             args.push.apply(args, ['+set', 'r_dynamiclight', '1'])
             args.push.apply(args, ['+set', 'r_shadowFilter', '2'])
             /* don't set dlight to 2 as it's broken */
@@ -279,9 +258,7 @@
             // Additional network optimizations for 1Gbit connection
             args.push.apply(args, ['+set', 'cl_timenudge', '0']) // Optimal setting for high bandwidth
             args.push.apply(args, ['+set', 'cg_predictItems', '1']) // Enable item prediction
-            args.push.apply(args, ['+set', 'cl_antilag', '1']) // Enable antilag
             args.push.apply(args, ['+set', 'net_socksEnabled', '0']) // Disable SOCKS proxy for direct connection
-            args.push.apply(args, ['+set', 'net_noipx', '1']) // Disable unused protocols
             args.push.apply(args, ['+set', 'com_zoneMegs', '24']) // Reduced to avoid memory allocation issues
 
             // Name is already set at the beginning of args array

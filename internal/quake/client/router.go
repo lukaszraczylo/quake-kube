@@ -131,7 +131,7 @@ func NewRouter(cfg *Config) (*echo.Echo, error) {
 	e.GET("/info", func(c echo.Context) error {
 		m, err := quakenet.GetInfo(cfg.ServerAddr)
 		if err != nil {
-			return err
+			return unavailable(err)
 		}
 		return c.JSON(http.StatusOK, m)
 	})
@@ -139,7 +139,7 @@ func NewRouter(cfg *Config) (*echo.Echo, error) {
 	e.GET("/status", func(c echo.Context) error {
 		m, err := quakenet.GetStatus(cfg.ServerAddr)
 		if err != nil {
-			return err
+			return unavailable(err)
 		}
 		return c.JSON(http.StatusOK, m)
 	})
@@ -162,6 +162,11 @@ func NewRouter(cfg *Config) (*echo.Echo, error) {
 		Transport: &HostHeaderTransport{RoundTripper: http.DefaultTransport, Host: csurl.Host},
 	}))
 	return e, nil
+}
+
+// unavailable maps a failed game server query to 503, not an opaque 500.
+func unavailable(err error) error {
+	return echo.NewHTTPError(http.StatusServiceUnavailable, "game server unavailable").SetInternal(err)
 }
 
 // staticCacheMaxAge lets browsers reuse the 4 MB ioquake3.js between visits;
