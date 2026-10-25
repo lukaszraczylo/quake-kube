@@ -64,10 +64,10 @@ func GetBody(url string) ([]byte, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create request")
 	}
-	
+
 	// Add performance-oriented headers
 	req.Header.Set("Accept-Encoding", "identity") // Skip decompression overhead
-	
+
 	resp, err := defaultClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute request")
@@ -104,7 +104,7 @@ func GetBody(url string) ([]byte, error) {
 			return nil, errors.Wrap(err, "error reading response body")
 		}
 	}
-	
+
 	return result, nil
 }
 
@@ -113,7 +113,7 @@ func GetUntil(url string, stop <-chan struct{}) error {
 	// Use exponential backoff for more efficient polling
 	backoff := 50 * time.Millisecond
 	maxBackoff := 1 * time.Second
-	
+
 	for {
 		select {
 		case <-stop:
@@ -128,10 +128,10 @@ func GetUntil(url string, stop <-chan struct{}) error {
 				}
 				continue
 			}
-			
+
 			// Use HEAD method instead of GET for faster polling
 			req.Method = http.MethodHead
-			
+
 			resp, err := pollingClient.Do(req)
 			if err != nil {
 				time.Sleep(backoff)
