@@ -12,5 +12,11 @@
     "typescript": "7.0.2",
     "vite": "8.3.5",
     "vitest": "5.0.5"
-  }
+  },
+  "pnpm": {
+    "overrides": {
+      "@asamuzakjp/css-color": "7.1.7"
+    }
+  },
+  "packageManager": "pnpm@10.26.2"
 }
