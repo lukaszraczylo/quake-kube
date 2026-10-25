@@ -6,10 +6,11 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 
 	httputil "github.com/lukaszraczylo/quake-kube/internal/util/net/http"
@@ -24,18 +25,21 @@ func CopyAssets(u *url.URL, dir string) error {
 	}
 
 	for _, f := range files {
-		path := filepath.Join(dir, f.Name)
+		path, err := safeJoin(dir, f.Name)
+		if err != nil {
+			return errors.Wrapf(err, "manifest entry %q", f.Name)
+		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			continue
 		}
-		data, err := httputil.GetBody(url + fmt.Sprintf("/assets/%d-%s", f.Checksum, f.Name))
+		data, err := fetchAsset(url, f)
 		if err != nil {
 			return err
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			continue
+		if sum := crc32.ChecksumIEEE(data); sum != f.Checksum {
+			return errors.Errorf("checksum mismatch for %s: got %d, want %d", f.Name, sum, f.Checksum)
 		}
-		if err := os.WriteFile(path, data, 0644); err != nil {
+		if err := writeFileAtomic(path, bytes.NewReader(data)); err != nil {
 			return err
 		}
 		if strings.HasPrefix(f.Name, "linuxq3ademo") {
@@ -51,6 +55,21 @@ func CopyAssets(u *url.URL, dir string) error {
 		}
 	}
 	return nil
+}
+
+// fetchAsset tries the checksum-prefixed-basename route this content server
+// serves (baseq3/<crc>-pak0.pk3), then the legacy prefixed-path route.
+func fetchAsset(base string, f *File) ([]byte, error) {
+	dir, name := path.Split(f.Name)
+	data, err := httputil.GetBody(base + fmt.Sprintf("/assets/%s%d-%s", dir, f.Checksum, name))
+	if err == nil {
+		return data, nil
+	}
+	legacy, lerr := httputil.GetBody(base + fmt.Sprintf("/assets/%d-%s", f.Checksum, f.Name))
+	if lerr != nil {
+		return nil, err
+	}
+	return legacy, nil
 }
 
 func getManifest(url string) ([]*File, error) {
@@ -74,6 +93,9 @@ func extractPointPacks(path, dir string) error {
 		return err
 	}
 	idx := bytes.Index(data, gzipMagicHeader)
+	if idx < 0 {
+		return errors.Errorf("no gzip payload in %s", path)
+	}
 	data = data[idx:]
 	gr, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
@@ -100,11 +122,11 @@ func extractPointPacks(path, dir string) error {
 			if err != nil {
 				return err
 			}
-			path := filepath.Join(dir, hdr.Name)
-			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			path, err := safeJoin(dir, hdr.Name)
+			if err != nil {
 				return err
 			}
-			if err := os.WriteFile(path, data, 0644); err != nil {
+			if err := writeFileAtomic(path, bytes.NewReader(data)); err != nil {
 				return err
 			}
 		}

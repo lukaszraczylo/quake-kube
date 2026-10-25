@@ -17,6 +17,7 @@ var opts struct {
 	Addr           string
 	AssetsDir      string
 	SeedContentURL string
+	UploadToken    string
 }
 
 func NewCommand() *cobra.Command {
@@ -48,17 +49,20 @@ func NewCommand() *cobra.Command {
 			}
 
 			e, err := quakecontent.NewRouter(&quakecontent.Config{
-				AssetsDir: opts.AssetsDir,
+				AssetsDir:   opts.AssetsDir,
+				UploadToken: opts.UploadToken,
 			})
 			if err != nil {
 				return err
 			}
 			s := &http.Server{
-				Addr:           opts.Addr,
-				Handler:        e,
-				ReadTimeout:    10240 * time.Second,
-				WriteTimeout:   10240 * time.Second,
-				MaxHeaderBytes: 1 << 20,
+				Addr:              opts.Addr,
+				Handler:           e,
+				ReadHeaderTimeout: 10 * time.Second,
+				ReadTimeout:       30 * time.Minute, // large pk3 uploads
+				WriteTimeout:      30 * time.Minute, // large pk3 downloads
+				IdleTimeout:       2 * time.Minute,
+				MaxHeaderBytes:    1 << 20,
 			}
 			fmt.Printf("Starting server %s\n", opts.Addr)
 			return s.ListenAndServe()
@@ -66,6 +70,7 @@ func NewCommand() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&opts.Addr, "addr", "a", ":9090", "address <host>:<port>")
 	cmd.Flags().StringVarP(&opts.AssetsDir, "assets-dir", "d", "assets", "assets directory")
+	cmd.Flags().StringVar(&opts.UploadToken, "upload-token", os.Getenv("Q3_UPLOAD_TOKEN"), "bearer token required for map uploads (empty allows anyone)")
 	cmd.Flags().StringVar(&opts.SeedContentURL, "seed-content-url", "", "seed content from another content server")
 	return cmd
 }

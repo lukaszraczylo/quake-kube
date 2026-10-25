@@ -12,31 +12,6 @@ type Map struct {
 	Name string `json:"name"`
 }
 
-var mapsList = []*Map{}
-
-func getMaps(dir string) (result []*Map, err error) {
-	if len(mapsList) == 0 {
-		err = walk(dir, func(path string, _ os.FileInfo, _ error) error {
-			mp, err := OpenMapPack(path)
-			if err != nil {
-				return err
-			}
-			defer mp.Close()
-
-			maps, err := mp.Maps()
-			if err != nil {
-				return err
-			}
-			result = append(result, maps...)
-			mapsList = result
-			return err
-		}, ".pk3")
-	} else {
-		result = mapsList
-	}
-	return
-}
-
 type MapPack struct {
 	*os.File
 	*zip.Reader
@@ -51,10 +26,12 @@ func OpenMapPack(path string) (*MapPack, error) {
 	}
 	info, err := f.Stat()
 	if err != nil {
+		closeQuietly(f)
 		return nil, err
 	}
 	r, err := zip.NewReader(f, info.Size())
 	if err != nil {
+		closeQuietly(f)
 		return nil, err
 	}
 	mp := &MapPack{
