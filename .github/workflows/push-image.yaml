@@ -18,7 +18,7 @@ permissions:
 jobs:
   prepare:
     name: Preparing build context
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     outputs:
       SANITISED_REPOSITORY_NAME: ${{ steps.get_env.outputs.SANITISED_REPOSITORY_NAME }}
       DOCKER_IMAGE: ${{ steps.get_env.outputs.DOCKER_IMAGE }}
@@ -34,10 +34,10 @@ jobs:
         id: get_env
         run: |
           TMP_SANITISED_REPOSITORY_NAME=$(echo ${{ github.event.repository.name }} | sed -e 's|\.|-|g')
-          echo "::set-output name=SANITISED_REPOSITORY_NAME::$TMP_SANITISED_REPOSITORY_NAME"
-          echo "::set-output name=DOCKER_IMAGE::ghcr.io/${{ github.repository_owner }}/q3"
-          echo "::set-output name=GITHUB_COMMIT_NUMBER::$(git rev-list --count HEAD)"
-          echo "::set-output name=GITHUB_SHA::$(echo ${GITHUB_SHA::8})"
+          echo "SANITISED_REPOSITORY_NAME=$TMP_SANITISED_REPOSITORY_NAME" >> "$GITHUB_OUTPUT"
+          echo "DOCKER_IMAGE=ghcr.io/${{ github.repository_owner }}/q3" >> "$GITHUB_OUTPUT"
+          echo "GITHUB_COMMIT_NUMBER=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+          echo "GITHUB_SHA=$(echo ${GITHUB_SHA::8})" >> "$GITHUB_OUTPUT"
 
       - name: Establish semver
         id: semver
@@ -55,7 +55,7 @@ jobs:
   build-local:
     needs: [prepare]
     name: Docker image build (multiarch)
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     #     runs-on: self-hosted
     steps:
       - name: Checkout repo
