@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"html/template"
 	"io"
 	"net/http"
@@ -128,10 +129,12 @@ func NewRouter(cfg *Config) (*echo.Echo, error) {
 
 	e.GET("/metrics", echo.WrapHandler(promhttp.Handler()))
 
+	// ioq3ded rate-limits queries per source address, so concurrent joins must
+	// share one cached answer, and a failed refresh serves the stale one.
 	e.GET("/info", func(c echo.Context) error {
-		m, err := quakenet.GetInfo(cfg.ServerAddr)
-		if err != nil {
-			return unavailable(err)
+		m, ok := infoCache.getInfoCached(cfg.ServerAddr)
+		if !ok {
+			return unavailable(errServerUnreachable)
 		}
 		return c.JSON(http.StatusOK, m)
 	})
@@ -163,6 +166,8 @@ func NewRouter(cfg *Config) (*echo.Echo, error) {
 	}))
 	return e, nil
 }
+
+var errServerUnreachable = errors.New("no cached or live server info")
 
 // unavailable maps a failed game server query to 503, not an opaque 500.
 func unavailable(err error) error {
