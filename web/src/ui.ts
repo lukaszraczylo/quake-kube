@@ -16,7 +16,26 @@ export function showError(err: unknown): void {
   box.replaceChildren(msg, retry);
 }
 
-/** Keeps feedback on screen until the engine adds its canvas. */
+const LOADING_LABEL = "Downloading game files";
+
+function shown(frame: HTMLElement, selector: string): boolean {
+  return frame.querySelector<HTMLElement>(selector)?.style.display === "block";
+}
+
+/** Swaps the engine's per-file names for one overall percentage. */
+function tidyDownloadLabel(frame: HTMLElement): void {
+  const progress = frame.querySelector("#loading-progress");
+  const label = progress?.querySelector(".description");
+  const bar = progress?.querySelector<HTMLElement>(".bar");
+  if (!label || !bar || !label.textContent) return;
+  const text = `${LOADING_LABEL}\u2026 ${Math.round(parseFloat(bar.style.width) || 0)}%`;
+  if (label.textContent !== text) label.textContent = text;
+}
+
+/**
+ * Keeps feedback on screen until the engine adds its canvas. The engine draws
+ * its own download panel and licence prompt, so our text steps aside for both.
+ */
 export function showLoading(frame: HTMLElement): void {
   const box = statusBox();
   box.className = "status loading";
@@ -25,7 +44,11 @@ export function showLoading(frame: HTMLElement): void {
     if (frame.querySelector("canvas")) {
       box.className = "status";
       observer.disconnect();
+      return;
     }
+    tidyDownloadLabel(frame);
+    const engineBusy = shown(frame, "#loading") || shown(frame, "#eula-frame");
+    box.className = engineBusy ? "status" : "status loading";
   });
-  observer.observe(frame, { childList: true, subtree: true });
+  observer.observe(frame, { childList: true, subtree: true, attributes: true, characterData: true });
 }

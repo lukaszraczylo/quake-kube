@@ -29,6 +29,16 @@ class Observer {
 
 const observers = new Set<Observer>();
 
+function notify(el: FakeElement): void {
+  for (const o of observers) if (o.target && el.within(o.target)) queueMicrotask(o.cb);
+}
+
+function matches(el: FakeElement, selector: string): boolean {
+  if (selector.startsWith("#")) return el.id === selector.slice(1);
+  if (selector.startsWith(".")) return el.className.split(" ").includes(selector.slice(1));
+  return el.tag === selector;
+}
+
 export class FakeElement {
   id = "";
   className = "";
@@ -40,11 +50,19 @@ export class FakeElement {
   children: FakeElement[] = [];
   parent: FakeElement | null = null;
   #text = "";
+  readonly style: Record<string, string>;
   #handlers = new Map<string, Handler[]>();
 
   readonly tag: string;
   constructor(tag: string) {
     this.tag = tag;
+    this.style = new Proxy<Record<string, string>>({}, {
+      set: (t, k: string, v: string) => {
+        t[k] = v;
+        notify(this);
+        return true;
+      },
+    });
   }
 
   set innerHTML(_: string) {
@@ -57,12 +75,13 @@ export class FakeElement {
   set textContent(v: string) {
     this.#text = v;
     this.children = [];
+    notify(this);
   }
 
   appendChild(child: FakeElement): FakeElement {
     child.parent = this;
     this.children.push(child);
-    for (const o of observers) if (o.target && this.within(o.target)) queueMicrotask(o.cb);
+    notify(this);
     return child;
   }
   replaceChildren(...kids: FakeElement[]): void {
@@ -75,10 +94,10 @@ export class FakeElement {
     this.parent.children = this.parent.children.filter((c) => c !== this);
     this.parent = null;
   }
-  querySelector(tag: string): FakeElement | null {
+  querySelector(selector: string): FakeElement | null {
     for (const c of this.children) {
-      if (c.tag === tag) return c;
-      const hit = c.querySelector(tag);
+      if (matches(c, selector)) return c;
+      const hit = c.querySelector(selector);
       if (hit) return hit;
     }
     return null;
@@ -95,7 +114,7 @@ export class FakeElement {
     this.dispatch("submit");
   }
 
-  private within(root: FakeElement): boolean {
+  within(root: FakeElement): boolean {
     for (let n: FakeElement | null = this; n; n = n.parent) if (n === root) return true;
     return false;
   }

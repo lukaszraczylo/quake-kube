@@ -78,3 +78,94 @@ describe("showLoading", () => {
     assert.equal(status().className, "status error");
   });
 });
+
+describe("showLoading with the engine's own panels", () => {
+  const frameEl = () => env.byId.get("viewport-frame") as FakeElement;
+
+  function enginePanel(): { panel: FakeElement; label: FakeElement; bar: FakeElement; eula: FakeElement } {
+    const mk = (tag: string, cls = "", id = "") => {
+      const e = new FakeElement(tag);
+      e.className = cls;
+      e.id = id;
+      return e;
+    };
+    const loading = mk("div", "", "loading");
+    const progress = mk("div", "", "loading-progress");
+    const label = mk("div", "description");
+    const bar = mk("div", "bar");
+    progress.appendChild(label);
+    progress.appendChild(bar);
+    loading.appendChild(progress);
+    const eula = mk("div", "", "eula-frame");
+    frameEl().appendChild(loading);
+    frameEl().appendChild(eula);
+    return { panel: loading, label, bar, eula };
+  }
+
+  it("hides file names and shows one overall percentage", async () => {
+    showLoading(frame());
+    const { panel, label, bar } = enginePanel();
+    panel.style.display = "block";
+    bar.style.width = "37.4%";
+    label.textContent = "loading baseq3/pak0.pk3";
+    await tick();
+    assert.equal(label.textContent, "Downloading game files… 37%");
+    assert.ok(!label.textContent.includes(".pk3"));
+  });
+  it("follows the bar as the next file starts", async () => {
+    showLoading(frame());
+    const { panel, label, bar } = enginePanel();
+    panel.style.display = "block";
+    bar.style.width = "10%";
+    label.textContent = "loading baseq3/pak1.pk3";
+    await tick();
+    bar.style.width = "62%";
+    label.textContent = "loading baseq3/pak2.pk3";
+    await tick();
+    assert.equal(label.textContent, "Downloading game files… 62%");
+  });
+  it("shows 0% when the bar has no width yet", async () => {
+    showLoading(frame());
+    const { panel, label } = enginePanel();
+    panel.style.display = "block";
+    label.textContent = "loading baseq3/pak0.pk3";
+    await tick();
+    assert.equal(label.textContent, "Downloading game files… 0%");
+  });
+  it("steps aside while the engine panel shows and returns after", async () => {
+    showLoading(frame());
+    const { panel } = enginePanel();
+    panel.style.display = "block";
+    await tick();
+    assert.equal(status().className, "status");
+    panel.style.display = "none";
+    await tick();
+    assert.equal(status().className, "status loading");
+  });
+  it("steps aside for the licence prompt", async () => {
+    showLoading(frame());
+    const { eula } = enginePanel();
+    eula.style.display = "block";
+    await tick();
+    assert.equal(status().className, "status");
+    eula.style.display = "none";
+    await tick();
+    assert.equal(status().className, "status loading");
+  });
+  it("leaves the label alone when the panel is empty", async () => {
+    showLoading(frame());
+    const { label } = enginePanel();
+    label.textContent = "";
+    await tick();
+    assert.equal(label.textContent, "");
+  });
+  it("stops reacting once the canvas exists", async () => {
+    showLoading(frame());
+    const { panel } = enginePanel();
+    add(frameEl(), "canvas");
+    await tick();
+    panel.style.display = "block";
+    await tick();
+    assert.equal(status().className, "status");
+  });
+});
