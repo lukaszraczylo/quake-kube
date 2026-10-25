@@ -43,3 +43,35 @@ describe("buildArgs", () => {
     expect(buildArgs({ ...base, password: "x" }).slice(-3)).toEqual(["+set", "password", "x"]);
   });
 });
+
+describe("queryCommands edge and bad input", () => {
+  it("skips a malformed percent escape instead of throwing", () => {
+    expect(queryCommands("?%E0%A4%A&cg_fov 90")).toEqual(["+cg_fov", "90"]);
+  });
+  it("ignores empty segments", () => {
+    expect(queryCommands("?&&cg_fov 90&")).toEqual(["+cg_fov", "90"]);
+  });
+  it("splits on = like the original parser", () => {
+    expect(queryCommands("?a=b")).toEqual(["+a", "+b"]);
+  });
+  it("accepts a query without a leading question mark", () => {
+    expect(queryCommands("cg_fov 90")).toEqual(["+cg_fov", "90"]);
+  });
+  it("keeps a very long query intact", () => {
+    const cmd = "x".repeat(10_000);
+    expect(queryCommands(`?${cmd}`)).toEqual([`+${cmd}`]);
+  });
+});
+
+describe("buildArgs edge cases", () => {
+  it("treats an empty password as unset", () => {
+    expect(buildArgs({ name: "a", host: "h:1", search: "", password: "" })).not.toContain("password");
+  });
+  it("passes a name with spaces as one argument", () => {
+    expect(buildArgs({ name: "big bob", host: "h:1", search: "" })[2]).toBe("big bob");
+  });
+  it("has no duplicate default cvars", () => {
+    const keys = DEFAULT_CVARS.map(([k]) => k);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});

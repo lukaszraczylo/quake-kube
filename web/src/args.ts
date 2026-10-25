@@ -39,7 +39,13 @@ export function queryCommands(search: string): string[] {
   const query = search.startsWith("?") ? search.slice(1) : search;
   const args: string[] = [];
   for (const part of query.match(/[^&=]+/g) ?? []) {
-    const words = decodeURIComponent(part).split(" ");
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(part);
+    } catch {
+      continue; // a malformed escape must not block joining
+    }
+    const words = decoded.split(" ");
     words[0] = "+" + words[0];
     args.push(...words);
   }

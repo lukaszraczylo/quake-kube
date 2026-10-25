@@ -37,7 +37,11 @@ function join(): void {
   });
   main?.remove();
   showLoading(frame);
-  ioq3.callMain(args);
+  try {
+    ioq3.callMain(args);
+  } catch (err) {
+    showError(err);
+  }
 }
 
 function initForm(): void {
