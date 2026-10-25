@@ -1,3 +1,12 @@
+FROM node:22-alpine AS web
+
+WORKDIR /web
+RUN corepack enable
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY web/ ./
+RUN mkdir -p /public && pnpm exec vite build --outDir /public --emptyOutDir
+
 FROM golang:1 AS builder
 
 WORKDIR /workspace
@@ -10,6 +19,7 @@ RUN go mod download
 ADD cmd cmd/
 ADD internal internal/
 ADD public public/
+COPY --from=web /public/app.js public/app.js
 COPY tools tools/
 RUN /usr/local/go/bin/go run ./tools/genstatic.go public public
 

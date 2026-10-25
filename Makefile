@@ -6,7 +6,10 @@ GO_BUILD_ENV_VARS := GO111MODULE=on CGO_ENABLED=0
 q3: gen
 	@$(GO_BUILD_ENV_VARS) go build -o $(BIN_DIR)/q3 $(GOFLAGS) -ldflags '$(LDFLAGS)' ./cmd/q3
 
-gen: ## Generate and embed templates
+web: ## Build the TypeScript frontend into public/app.js
+	@cd web && pnpm install --frozen-lockfile && pnpm run typecheck && pnpm test && pnpm run build
+
+gen: web ## Generate and embed templates
 	@go run tools/genstatic.go public public
 
 VERSION ?= $(shell semver-gen generate -l 2>/dev/null | awk '{print $$2}' || echo "latest")

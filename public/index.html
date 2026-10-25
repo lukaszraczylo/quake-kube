@@ -5,16 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Quake 3 Arena</title>
     <link rel="stylesheet" href="game.css">
-    <script type="text/javascript">
-      // Configure WebAssembly memory before loading the main script
-      // This sets up 384MB of memory (instead of default ~234MB)
-      var Module = {
-        TOTAL_MEMORY: 384 * 1024 * 1024,
-        printErr: function(text) { console.error(text); },
-        canvas: null,
-        setStatus: function(text) { console.log(text); }
-      };
-    </script>
+    <script src="app.js" defer></script>
     <script type="text/javascript" src="ioquake3.js" defer></script>
     <link rel="apple-touch-icon" sizes="57x57" href="/images/apple-icon-57x57.png">
     <link rel="apple-touch-icon" sizes="60x60" href="/images/apple-icon-60x60.png">
@@ -33,67 +24,6 @@
     <meta name="msapplication-TileColor" content="#ffffff">
     <meta name="msapplication-TileImage" content="/images/ms-icon-144x144.png">
     <meta name="theme-color" content="#000000">
-    <script type="text/javascript">
-      function getQueryCommands() {
-        var search = /([^&=]+)/g;
-        var query  = window.location.search.substring(1);
-
-        var args = [];
-
-        var match;
-        while (match = search.exec(query)) {
-          var val = decodeURIComponent(match[1]);
-          val = val.split(' ');
-          val[0] = '+' + val[0];
-          args.push.apply(args, val);
-        }
-
-        return args;
-      }
-
-      // Shows an engine error in the page; the server has no handler for POST /.
-      function showError(err) {
-        var box = document.getElementById('status');
-        box.className = 'status error';
-        box.textContent = '';
-        var msg = document.createElement('p');
-        msg.textContent = String(err);
-        var retry = document.createElement('a');
-        retry.href = '/';
-        retry.textContent = 'Back to the lobby';
-        box.appendChild(msg);
-        box.appendChild(retry);
-      }
-
-      window.onload = function () {
-        function resizeViewport() {
-          if (!ioq3.canvas) {
-            // ignore if the canvas hasn't yet initialized
-            return;
-          }
-          if ((document['webkitFullScreenElement'] || document['webkitFullscreenElement'] ||
-                document['mozFullScreenElement'] || document['mozFullscreenElement'] ||
-                document['fullScreenElement'] || document['fullscreenElement'])) {
-            // ignore resize events due to going fullscreen
-            return;
-          }
-          ioq3.setCanvasSize(ioq3.viewport.offsetWidth, ioq3.viewport.offsetHeight);
-        }
-
-        ioq3.viewport = document.getElementById('viewport-frame');
-        ioq3.elementPointerLock = true;
-        ioq3.exitHandler = function (err) {
-          if (err) {
-            showError(err);
-            return;
-          }
-
-          window.location.href = '/';
-        }
-
-        window.addEventListener('resize', resizeViewport);
-      };
-    </script>
     <style>
       .centered {
         position: fixed;
@@ -153,7 +83,7 @@
     <div id="main">
       <div id="bg"></div>
       <div class="centered">
-        <form class="form" onsubmit="join(); return false;">
+        <form class="form" id="join-form">
           <label for="playerName">Player name</label>
           <input type="text" id="playerName" maxlength="30" autocomplete="nickname" autofocus>
           {{ with .NeedsPass }}
@@ -162,117 +92,6 @@
           {{ end }}
           <button type="submit" class="button">Join</button>
         </form>
-        <script type="text/javascript">
-          placeholder = "enter player name"
-          // If we have a stored name, use it for both placeholder and value
-          if (localStorage.playerName) {
-            placeholder = localStorage.playerName
-            // Pre-fill the input field with stored name
-            setTimeout(function() {
-              document.getElementById("playerName").value = localStorage.playerName
-            }, 0)
-          }
-          document.getElementById("playerName").placeholder = placeholder
-          // Keeps feedback on screen until the engine adds its canvas.
-          function showLoading() {
-            var box = document.getElementById("status");
-            box.className = "status loading";
-            box.textContent = "Loading game files...";
-            var frame = document.getElementById("viewport-frame");
-            var observer = new MutationObserver(function () {
-              if (frame.querySelector("canvas")) {
-                box.className = "status";
-                observer.disconnect();
-              }
-            });
-            observer.observe(frame, { childList: true, subtree: true });
-          }
-          function join(){
-            var inputPlayerName = document.getElementById("playerName");
-            // Update localStorage when input field has value
-            var typedName = inputPlayerName.value.trim();
-            if (typedName != "") {
-               localStorage.setItem("playerName", typedName);
-               console.log("Player name set to " + typedName);
-            } else if (localStorage.playerName) {
-               // Use existing name in localStorage if input is empty
-               console.log("Using existing player name: " + localStorage.playerName);
-            } else {
-               // No name provided and nothing in storage - use default
-               var defaultName = "Player_" + Math.floor(Math.random() * 1000);
-               localStorage.setItem("playerName", defaultName);
-               console.log("Using default player name: " + defaultName);
-            }
-            
-            // Get the final player name that will be used
-            var finalPlayerName = localStorage.playerName;
-            console.log("Final player name for connection: " + finalPlayerName);
-            
-            host = document.location.host
-            if (!host.includes(":")) { host = host + (window.location.protocol == 'https:' ? ":443" : ":80") }
-            
-            // Add more extensive name setting with multiple approaches to ensure it works
-            var args = [
-                // Player name settings - we set this in multiple ways for compatibility
-                '+set', 'name', finalPlayerName,
-                '+name', finalPlayerName,  // Legacy format as fallback
-                '+set', 'fs_cdn', host,
-                '+connect', host
-            ];
-            
-            // Log the final arguments for debugging
-            console.log("Setting player name with multiple methods to ensure proper registration");
-            // Network optimization for 1Gbit connection
-            args.push.apply(args, ['+set', 'cl_allowDownload', '1'])
-            args.push.apply(args, ['+set', 'cl_timeout', '120']) // Lower timeout for faster reconnection
-            args.push.apply(args, ['+set', 'rate', '100000']) // Increase rate for 1Gbit connection
-            args.push.apply(args, ['+set', 'snaps', '40']) // Increase update frequency
-            args.push.apply(args, ['+set', 'cl_maxpackets', '125']) // More client packets for smoother gameplay
-            args.push.apply(args, ['+set', 'cl_packetdup', '0']) // Disable packet duplication on reliable networks
-            args.push.apply(args, ['+set', 'com_maxfps', '250']) // Higher max FPS
-            args.push.apply(args, ['+set', 'r_customwidth', '4096'])
-            args.push.apply(args, ['+set', 'r_customheight', '2160'])
-            args.push.apply(args, ['+set', 'cg_fov', '105'])
-            args.push.apply(args, ['+set', 'cg_drawfps', '0'])
-            args.push.apply(args, ['+set', 'r_picmip', '0'])
-            args.push.apply(args, ['+set', 'r_lodbias', '-2'])
-            args.push.apply(args, ['+set', 'r_hdr', '1'])
-            args.push.apply(args, ['+set', 'r_dynamiclight', '1'])
-            args.push.apply(args, ['+set', 'r_shadowFilter', '2'])
-            /* don't set dlight to 2 as it's broken */
-            args.push.apply(args, ['+set', 'r_flares', '1'])
-            args.push.apply(args, ['+set', 'r_subdivisions', '1'])
-            args.push.apply(args, ['+set', 'r_colorbits', '32'])
-            args.push.apply(args, ['+set', 'r_texturebits', '32'])
-
-            args.push.apply(args, ['+set', 'r_ext_max_anisotropy', '16'])
-            args.push.apply(args, ['+set', 'r_ext_multisample', '2']) // Reduced from 4 to lower memory usage
-            args.push.apply(args, ['+set', 'r_ext_framebuffer_multisample', '2']) // Reduced from 4 to lower memory usage
-            args.push.apply(args, ['+set', 'r_ext_compressed_textures', '1']) // Enable compression for faster loading on 1Gbit
-            args.push.apply(args, ['+set', 'r_textureMode', 'GL_LINEAR_MIPMAP_LINEAR']) // Best texture filtering
-            args.push.apply(args, ['+set', 'r_finish', '0']) // Disable synchronous rendering for better performance
-            args.push.apply(args, ['+set', 'r_swapInterval', '0']) // Disable vsync for lower latency
-            args.push.apply(args, ['+set', 'r_deluxeMapping', '1'])
-            args.push.apply(args, ['+set', 'com_hunkmegs', '96']) // Reduced to avoid memory allocation issues
-            
-            // Additional network optimizations for 1Gbit connection
-            args.push.apply(args, ['+set', 'cl_timenudge', '0']) // Optimal setting for high bandwidth
-            args.push.apply(args, ['+set', 'cg_predictItems', '1']) // Enable item prediction
-            args.push.apply(args, ['+set', 'net_socksEnabled', '0']) // Disable SOCKS proxy for direct connection
-            args.push.apply(args, ['+set', 'com_zoneMegs', '24']) // Reduced to avoid memory allocation issues
-
-            // Name is already set at the beginning of args array
-            args.push.apply(args, getQueryCommands());
-            var inputPassword = document.getElementById("password");
-            if (inputPassword && inputPassword.value != "") {
-               args.push.apply(args, ['+set', 'password', inputPassword.value]);
-            }
-            var element = document.getElementById("main");
-            element.parentNode.removeChild(element);
-            showLoading();
-            ioq3.callMain(args);
-          }
-        </script>
       </div>
     </div>
     
