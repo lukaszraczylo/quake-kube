@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "rm -rf ../public/app && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"src/**/*.test.ts\""
   },
