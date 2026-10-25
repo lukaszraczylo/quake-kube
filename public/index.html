@@ -1,8 +1,10 @@
 {{define "index"}}<!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <title>QuakeJS Local</title>
-    <link rel="stylesheet" href="game.css"></link>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Quake 3 Arena</title>
+    <link rel="stylesheet" href="game.css">
     <script type="text/javascript">
       // Configure WebAssembly memory before loading the main script
       // This sets up 384MB of memory (instead of default ~234MB)
@@ -13,7 +15,7 @@
         setStatus: function(text) { console.log(text); }
       };
     </script>
-    <script type="text/javascript" src="ioquake3.js"></script>
+    <script type="text/javascript" src="ioquake3.js" defer></script>
     <link rel="apple-touch-icon" sizes="57x57" href="/images/apple-icon-57x57.png">
     <link rel="apple-touch-icon" sizes="60x60" href="/images/apple-icon-60x60.png">
     <link rel="apple-touch-icon" sizes="72x72" href="/images/apple-icon-72x72.png">
@@ -30,7 +32,7 @@
     <link rel="manifest" href="/manifest.json">
     <meta name="msapplication-TileColor" content="#ffffff">
     <meta name="msapplication-TileImage" content="/images/ms-icon-144x144.png">
-    <meta name="theme-color" content="#ffffff">
+    <meta name="theme-color" content="#000000">
     <script type="text/javascript">
       // Basic memory monitoring to prevent WebAssembly crashes (doesn't use websocket tracking)
       function monitorMemory() {
@@ -68,6 +70,20 @@
         return args;
       }
 
+      // Shows an engine error in the page; the server has no handler for POST /.
+      function showError(err) {
+        var box = document.getElementById('status');
+        box.className = 'status error';
+        box.textContent = '';
+        var msg = document.createElement('p');
+        msg.textContent = String(err);
+        var retry = document.createElement('a');
+        retry.href = '/';
+        retry.textContent = 'Back to the lobby';
+        box.appendChild(msg);
+        box.appendChild(retry);
+      }
+
       window.onload = function () {
         function resizeViewport() {
           if (!ioq3.canvas) {
@@ -87,18 +103,7 @@
         ioq3.elementPointerLock = true;
         ioq3.exitHandler = function (err) {
           if (err) {
-            var form = document.createElement('form');
-            form.setAttribute('method', 'POST');
-            form.setAttribute('action', '/');
-
-            var hiddenField = document.createElement('input');
-            hiddenField.setAttribute('type', 'hidden');
-            hiddenField.setAttribute('name', 'error');
-            hiddenField.setAttribute('value', err);
-            form.appendChild(hiddenField);
-
-            document.body.appendChild(form);
-            form.submit();
+            showError(err);
             return;
           }
 
@@ -129,6 +134,27 @@
         padding-top: 16px;
         padding-bottom: 16px;
       }
+      .form label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+      }
+      .status {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+        color: #fff;
+        font-family: sans-serif;
+        text-align: center;
+      }
+      .status.loading, .status.error { display: block; }
+      .status.error a { color: #fe121e; }
+      .button:focus-visible, .form input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
       .button {
         background-color: #fe121e;
         border: none;
@@ -142,15 +168,18 @@
     </style>
   </head>
   <body>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
     <div id="main">
       <div id="bg"></div>
       <div class="centered">
-        <form class="form">
-          <input type="text" id="playerName">
+        <form class="form" onsubmit="join(); return false;">
+          <label for="playerName">Player name</label>
+          <input type="text" id="playerName" maxlength="30" autocomplete="nickname" autofocus>
           {{ with .NeedsPass }}
-            <input type="password" placeholder="password" id="password">
+            <label for="password">Server password</label>
+            <input type="password" placeholder="password" id="password" autocomplete="current-password">
           {{ end }}
-          <button onclick="join()" type="submit" class="button">Join</button>
+          <button type="submit" class="button">Join</button>
         </form>
         <script type="text/javascript">
           placeholder = "enter player name"
@@ -163,12 +192,27 @@
             }, 0)
           }
           document.getElementById("playerName").placeholder = placeholder
+          // Keeps feedback on screen until the engine adds its canvas.
+          function showLoading() {
+            var box = document.getElementById("status");
+            box.className = "status loading";
+            box.textContent = "Loading game files...";
+            var frame = document.getElementById("viewport-frame");
+            var observer = new MutationObserver(function () {
+              if (frame.querySelector("canvas")) {
+                box.className = "status";
+                observer.disconnect();
+              }
+            });
+            observer.observe(frame, { childList: true, subtree: true });
+          }
           function join(){
             var inputPlayerName = document.getElementById("playerName");
             // Update localStorage when input field has value
-            if (inputPlayerName.value != "") {
-               localStorage.setItem("playerName", inputPlayerName.value);
-               console.log("Player name set to " + inputPlayerName.value);
+            var typedName = inputPlayerName.value.trim();
+            if (typedName != "") {
+               localStorage.setItem("playerName", typedName);
+               console.log("Player name set to " + typedName);
             } else if (localStorage.playerName) {
                // Use existing name in localStorage if input is empty
                console.log("Using existing player name: " + localStorage.playerName);
@@ -248,6 +292,7 @@
             }
             var element = document.getElementById("main");
             element.parentNode.removeChild(element);
+            showLoading();
             ioq3.callMain(args);
           }
         </script>

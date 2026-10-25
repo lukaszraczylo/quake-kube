@@ -145,7 +145,7 @@ func NewRouter(cfg *Config) (*echo.Echo, error) {
 	})
 
 	// static files
-	e.GET("/*", echo.WrapHandler(http.FileServer(cfg.Files)))
+	e.GET("/*", echo.WrapHandler(staticCache(http.FileServer(cfg.Files))))
 
 	// Quake3 assets requests must be proxied to the content server. The host
 	// header is manipulated to ensure that services like CloudFlare will not
@@ -162,6 +162,17 @@ func NewRouter(cfg *Config) (*echo.Echo, error) {
 		Transport: &HostHeaderTransport{RoundTripper: http.DefaultTransport, Host: csurl.Host},
 	}))
 	return e, nil
+}
+
+// staticCacheMaxAge lets browsers reuse the 4 MB ioquake3.js between visits;
+// Last-Modified revalidation still picks up a new build after the TTL.
+const staticCacheMaxAge = "public, max-age=3600"
+
+func staticCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", staticCacheMaxAge)
+		next.ServeHTTP(w, r)
+	})
 }
 
 type HostHeaderTransport struct {
