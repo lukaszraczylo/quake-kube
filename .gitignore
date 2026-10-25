@@ -17,4 +17,4 @@ bin/
 
 # Frontend build
 web/node_modules/
-public/app.js
+public/app/

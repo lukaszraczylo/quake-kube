@@ -1,80 +1,80 @@
-// @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from "vitest";
-import { showError, showLoading } from "./ui";
+import assert from "node:assert/strict";
+import { beforeEach, describe, it } from "node:test";
+import { showError, showLoading } from "./ui.ts";
+import { FakeElement, install, tick, type Env } from "./testdom.ts";
 
-let frame: HTMLElement;
-const status = () => document.getElementById("status") as HTMLElement;
-const tick = () => new Promise((r) => setTimeout(r, 0));
+let env: Env;
+const status = () => env.byId.get("status") as FakeElement;
+const frame = () => env.byId.get("viewport-frame") as unknown as HTMLElement;
+const add = (parent: FakeElement, tag: string) => parent.appendChild(new FakeElement(tag));
 
 beforeEach(() => {
-  document.body.innerHTML = '<div id="status" class="status"></div><div id="viewport-frame"></div>';
-  frame = document.getElementById("viewport-frame") as HTMLElement;
+  env = install();
 });
 
 describe("showError", () => {
-  it("shows the message with a link back to the lobby", () => {
+  it("shows the message with a link back to the join screen", () => {
     showError("boom");
-    expect(status().className).toBe("status error");
-    expect(status().querySelector("p")?.textContent).toBe("boom");
-    expect(status().querySelector("a")?.getAttribute("href")).toBe("/");
+    assert.equal(status().className, "status error");
+    assert.equal(status().querySelector("p")?.textContent, "boom");
+    assert.equal(status().querySelector("a")?.href, "/");
   });
-  it("does not interpret markup in the message", () => {
-    showError('<img src=x onerror="alert(1)">');
-    expect(status().querySelector("img")).toBeNull();
-    expect(status().querySelector("p")?.textContent).toContain("<img");
+  it("uses textContent only, so markup stays text", () => {
+    showError('<img src=x onerror="alert(1)">'); // the fake throws on innerHTML
+    assert.equal(status().querySelector("img"), null);
+    assert.match(status().textContent, /<img/);
   });
   it("replaces a previous error instead of stacking", () => {
     showError("one");
     showError("two");
-    expect(status().querySelectorAll("p")).toHaveLength(1);
-    expect(status().textContent).toContain("two");
+    assert.equal(status().children.filter((c) => c.tag === "p").length, 1);
+    assert.match(status().textContent, /two/);
   });
   it("stringifies non-string errors", () => {
     showError(new Error("bad"));
-    expect(status().textContent).toContain("bad");
+    assert.match(status().textContent, /bad/);
     showError(undefined);
-    expect(status().querySelector("p")?.textContent).toBe("undefined");
+    assert.equal(status().querySelector("p")?.textContent, "undefined");
   });
   it("throws a clear error when #status is missing", () => {
-    document.body.innerHTML = "";
-    expect(() => showError("x")).toThrow("#status element missing");
+    env.byId.delete("status");
+    assert.throws(() => showError("x"), /#status element missing/);
   });
 });
 
 describe("showLoading", () => {
   it("shows the loading text", () => {
-    showLoading(frame);
-    expect(status().className).toBe("status loading");
-    expect(status().textContent).toBe("Loading game files...");
+    showLoading(frame());
+    assert.equal(status().className, "status loading");
+    assert.equal(status().textContent, "Loading game files...");
   });
   it("stays visible while the engine adds no canvas", async () => {
-    showLoading(frame);
-    frame.appendChild(document.createElement("div"));
+    showLoading(frame());
+    add(env.byId.get("viewport-frame") as FakeElement, "div");
     await tick();
-    expect(status().className).toBe("status loading");
+    assert.equal(status().className, "status loading");
   });
   it("hides once a canvas appears", async () => {
-    showLoading(frame);
-    frame.appendChild(document.createElement("canvas"));
+    showLoading(frame());
+    add(env.byId.get("viewport-frame") as FakeElement, "canvas");
     await tick();
-    expect(status().className).toBe("status");
+    assert.equal(status().className, "status");
   });
   it("detects a canvas nested deeper in the frame", async () => {
-    showLoading(frame);
-    const wrap = document.createElement("div");
-    frame.appendChild(wrap);
+    showLoading(frame());
+    const wrap = add(env.byId.get("viewport-frame") as FakeElement, "div");
     await tick();
-    wrap.appendChild(document.createElement("canvas"));
+    add(wrap, "canvas");
     await tick();
-    expect(status().className).toBe("status");
+    assert.equal(status().className, "status");
   });
   it("does not clobber a later error after the canvas appeared", async () => {
-    showLoading(frame);
-    frame.appendChild(document.createElement("canvas"));
+    showLoading(frame());
+    add(env.byId.get("viewport-frame") as FakeElement, "canvas");
     await tick();
     showError("late");
-    frame.appendChild(document.createElement("span"));
+    add(env.byId.get("viewport-frame") as FakeElement, "span");
     await tick();
-    expect(status().className).toBe("status error");
+    assert.equal(status().className, "status error");
   });
 });

@@ -1,61 +1,58 @@
-// @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { placeholder, resolveName, storedName } from "./player";
+import assert from "node:assert/strict";
+import { beforeEach, describe, it } from "node:test";
+import { placeholder, resolveName, storedName } from "./player.ts";
+import { install, type Env } from "./testdom.ts";
 
-beforeEach(() => localStorage.clear());
-afterEach(() => vi.restoreAllMocks());
+let env: Env;
+beforeEach(() => {
+  env = install();
+});
 
 describe("resolveName", () => {
   it("uses and stores the typed name", () => {
-    expect(resolveName("bob")).toBe("bob");
-    expect(localStorage.getItem("playerName")).toBe("bob");
+    assert.equal(resolveName("bob"), "bob");
+    assert.equal(env.storage.getItem("playerName"), "bob");
   });
-  it("trims the typed name", () => expect(resolveName("  bob  ")).toBe("bob"));
+  it("trims the typed name", () => assert.equal(resolveName("  bob  "), "bob"));
   it("falls back to the stored name when input is empty or blank", () => {
-    localStorage.setItem("playerName", "old");
-    expect(resolveName("")).toBe("old");
-    expect(resolveName("   ")).toBe("old");
+    env.storage.setItem("playerName", "old");
+    assert.equal(resolveName(""), "old");
+    assert.equal(resolveName("   "), "old");
   });
   it("generates and stores a default when nothing is known", () => {
     const name = resolveName("");
-    expect(name).toMatch(/^Player_\d{1,3}$/);
-    expect(localStorage.getItem("playerName")).toBe(name);
+    assert.match(name, /^Player_\d{1,3}$/);
+    assert.equal(env.storage.getItem("playerName"), name);
   });
   it("overwrites the stored name with a new typed one", () => {
-    localStorage.setItem("playerName", "old");
+    env.storage.setItem("playerName", "old");
     resolveName("new");
-    expect(storedName()).toBe("new");
+    assert.equal(storedName(), "new");
   });
 });
 
 describe("placeholder", () => {
   it("shows the stored name", () => {
-    localStorage.setItem("playerName", "bob");
-    expect(placeholder()).toBe("bob");
+    env.storage.setItem("playerName", "bob");
+    assert.equal(placeholder(), "bob");
   });
-  it("shows the hint when nothing is stored", () => expect(placeholder()).toBe("enter player name"));
+  it("shows the hint when nothing is stored", () => assert.equal(placeholder(), "enter player name"));
 });
 
 describe("blocked storage (flaky environments)", () => {
   it("still returns a name when reads and writes throw", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new DOMException("denied", "SecurityError");
-    });
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new DOMException("quota", "QuotaExceededError");
-    });
-    expect(resolveName("bob")).toBe("bob");
-    expect(resolveName("")).toMatch(/^Player_\d+$/);
-    expect(storedName()).toBeNull();
-    expect(placeholder()).toBe("enter player name");
+    env.storage.failGet = true;
+    env.storage.failSet = true;
+    assert.equal(resolveName("bob"), "bob");
+    assert.match(resolveName(""), /^Player_\d+$/);
+    assert.equal(storedName(), null);
+    assert.equal(placeholder(), "enter player name");
   });
   it("recovers when storage works again", () => {
-    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementationOnce(() => {
-      throw new Error("transient");
-    });
-    expect(storedName()).toBeNull();
-    get.mockRestore();
-    localStorage.setItem("playerName", "bob");
-    expect(storedName()).toBe("bob");
+    env.storage.setItem("playerName", "bob");
+    env.storage.failGet = true;
+    assert.equal(storedName(), null);
+    env.storage.failGet = false;
+    assert.equal(storedName(), "bob");
   });
 });

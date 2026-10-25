@@ -1,6 +1,6 @@
-import { buildArgs, connectHost } from "./args";
-import { placeholder, resolveName, storedName } from "./player";
-import { showError, showLoading } from "./ui";
+import { buildArgs, connectHost } from "./args.ts";
+import { placeholder, resolveName, storedName } from "./player.ts";
+import { showError, showLoading } from "./ui.ts";
 
 const WASM_MEMORY = 384 * 1024 * 1024;
 
