@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"sigs.k8s.io/yaml"
@@ -83,7 +84,7 @@ func (s *Server) Start(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(s.Dir, "baseq3/server.cfg"), data, 0644); err != nil {
+		if err := writeConfig(s.Dir, data); err != nil {
 			return err
 		}
 		if err := cmd.Start(); err != nil {
@@ -99,11 +100,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
-	go func() {
-		if err := cmd.Wait(); err != nil {
-			log.Println(err)
-		}
-	}()
+	logExit(cmd)
 
 	// Optimized metrics collection
 	go func() {
@@ -134,6 +131,10 @@ func (s *Server) Start(ctx context.Context) error {
 					log.Printf("metrics: get status failed %v", err)
 					continue
 				}
+
+				// Drop series of players who left; labels are unbounded otherwise.
+				scores.Reset()
+				pings.Reset()
 
 				// Update player count metric
 				currentPlayerCount := len(status.Players)
@@ -184,18 +185,18 @@ func (s *Server) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ch:
+			// A broken edit must not take down a running game server.
 			if err := s.reload(); err != nil {
-				return err
+				log.Printf("config reload failed, keeping current server: %v", err)
+				continue
 			}
 			configReloads.Inc()
 			if err := cmd.Restart(ctx); err != nil {
 				return err
 			}
-			go func() {
-				if err := cmd.Wait(); err != nil {
-					log.Println(err)
-				}
-			}()
+			logExit(cmd)
+		case <-cmd.Done():
+			return errors.New("ioq3ded exited unexpectedly")
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -214,8 +215,12 @@ func (s *Server) reload() error {
 	cfg := Default()
 
 	// Single unmarshal operation
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return err
+	if uerr := yaml.Unmarshal(data, cfg); uerr != nil {
+		return uerr
+	}
+
+	if cfg.ServerConfig.Password == "" || cfg.ServerConfig.Password == defaultRconPassword {
+		log.Println("warning: rcon password is empty or the default; set server.password")
 	}
 
 	// Marshal with optimized memory handling
@@ -224,11 +229,42 @@ func (s *Server) reload() error {
 		return err
 	}
 
-	// Create target path only once
-	targetPath := filepath.Join(s.Dir, "baseq3/server.cfg")
+	return writeConfig(s.Dir, data)
+}
 
-	// Write with atomic guarantee on most filesystems
-	return os.WriteFile(targetPath, data, 0644)
+// logExit logs the current process exit in the background.
+func logExit(cmd *exec.Cmd) {
+	wait := cmd.Waiter()
+	go func() {
+		if err := wait(); err != nil {
+			log.Println(err)
+		}
+	}()
+}
+
+// writeConfig replaces baseq3/server.cfg atomically so ioq3ded never reads a
+// half-written file.
+func writeConfig(dir string, data []byte) error {
+	target := filepath.Join(dir, "baseq3", "server.cfg")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { //nolint:gosec // ioq3ded may run as another user
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".server.cfg-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }() // no-op after a successful rename
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close() // the write error is the one to report
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil { //nolint:gosec // ioq3ded may run as another user
+		return err
+	}
+	return os.Rename(tmp.Name(), target)
 }
 
 // watch monitors config file for changes with optimized performance

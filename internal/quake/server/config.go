@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -110,88 +111,119 @@ type ServerConfig struct {
 	Hostname      string `name:"sv_hostname"`
 	MaxClients    int    `name:"sv_maxclients"`
 	Password      string `name:"rconpassword"`
+	// Network tuning; 0 leaves the engine default (sv_fps 20, sv_maxRate 0,
+	// sv_dlRate 100 kB/s).
+	FPS          int `json:"fps" name:"sv_fps,omitempty"`
+	MaxRate      int `json:"maxRate" name:"sv_maxRate,omitempty"`
+	DownloadRate int `json:"downloadRate" name:"sv_dlRate,omitempty"`
 }
 
+const (
+	defaultCaptureLimit = 8
+	defaultRconPassword = "changeme"
+	maxMapNameLen       = 64
+)
+
+var (
+	durationType = reflect.TypeOf(metav1.Duration{})
+	mapNameRe    = regexp.MustCompile(`^[A-Za-z0-9_\-]+$`)
+)
+
+// Marshal renders the config as a Quake 3 server.cfg.
 func (c *Config) Marshal() ([]byte, error) {
-	return writeStruct(reflect.Indirect(reflect.ValueOf(c)))
-}
-
-func writeStruct(v reflect.Value) ([]byte, error) {
-	if v.Kind() != reflect.Struct {
-		return nil, errors.Errorf("expected struct, received %T", v.Kind())
-	}
 	var b bytes.Buffer
-	for i := 0; i < v.Type().NumField(); i++ {
-		fv := v.Field(i)
-		switch fv.Kind() {
-		case reflect.Struct:
-			data, err := writeStruct(fv)
-			if err != nil {
-				return nil, err
-			}
-			b.Write(data)
-		case reflect.Slice:
-			switch val := fv.Interface().(type) {
-			case Maps:
-				data, _ := val.Marshal()
-				b.Write(data)
-			case []string:
-			default:
-				panic(fmt.Errorf("received unknown type %T", val))
-			}
-		default:
-			tv, ok := v.Type().Field(i).Tag.Lookup("name")
-			if !ok {
-				continue
-			}
-			s := toString(v.Type().Field(i).Name, fv)
-			switch tv {
-			case "sv_dlURL":
-				if s != "" {
-					b.WriteString(fmt.Sprintf("sets %s %s\n", tv, s))
-				}
-			default:
-				b.WriteString(fmt.Sprintf("seta %s %s\n", tv, strconv.Quote(s)))
-			}
-		}
+	if err := writeStruct(&b, reflect.Indirect(reflect.ValueOf(c))); err != nil {
+		return nil, err
 	}
-	for i := 0; i < v.Type().NumField(); i++ {
-		if v.Type().Field(i).Name == "Commands" {
-			cmds := v.Field(i).Interface().([]string)
-			for _, cmd := range cmds {
-				b.WriteString(cmd)
-				b.WriteString("\n")
-			}
+	if len(c.Maps) > 0 {
+		data, err := c.marshal(c.FragLimit, c.TimeLimit)
+		if err != nil {
+			return nil, err
 		}
+		b.Write(data)
+	}
+	for _, cmd := range c.Commands {
+		b.WriteString(cmd)
+		b.WriteString("\n")
 	}
 	return b.Bytes(), nil
 }
 
-func toString(name string, v reflect.Value) string {
+// writeStruct writes every tagged scalar field; slices are handled by Marshal.
+func writeStruct(b *bytes.Buffer, v reflect.Value) error {
+	if v.Kind() != reflect.Struct {
+		return errors.Errorf("expected struct, received %s", v.Kind())
+	}
+	for i := 0; i < v.Type().NumField(); i++ {
+		fv := v.Field(i)
+		if fv.Kind() == reflect.Slice {
+			continue
+		}
+		if fv.Kind() == reflect.Struct && fv.Type() != durationType {
+			if err := writeStruct(b, fv); err != nil {
+				return err
+			}
+			continue
+		}
+		tv, ok := v.Type().Field(i).Tag.Lookup("name")
+		if !ok {
+			continue
+		}
+		tv, omitEmpty := strings.CutSuffix(tv, ",omitempty")
+		if omitEmpty && fv.IsZero() {
+			continue
+		}
+		s, err := toString(v.Type().Field(i).Name, fv)
+		if err != nil {
+			return err
+		}
+		if tv == "sv_dlURL" {
+			if s != "" {
+				fmt.Fprintf(b, "sets %s %s\n", tv, quakeQuote(s))
+			}
+			continue
+		}
+		fmt.Fprintf(b, "seta %s %s\n", tv, quakeQuote(s))
+	}
+	return nil
+}
+
+// quakeQuote quotes for the Quake console, which has no escape sequences.
+func quakeQuote(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r == '"' || r == '\n' || r == '\r' {
+			return -1
+		}
+		return r
+	}, s)
+	return `"` + s + `"`
+}
+
+// minutes rounds up so a sub-minute limit never becomes 0 (unlimited).
+func minutes(d time.Duration) int {
+	return int((d + time.Minute - 1) / time.Minute)
+}
+
+func toString(name string, v reflect.Value) (string, error) {
 	switch val := v.Interface().(type) {
 	case string:
-		return val
+		return val, nil
 	case int:
-		return strconv.Itoa(val)
+		return strconv.Itoa(val), nil
 	case metav1.Duration:
-		switch name {
-		case "TimeLimit":
-			return fmt.Sprintf("%d", int(val.Minutes()))
-		default:
-			return fmt.Sprintf("%d", int(val.Seconds()))
+		if name == "TimeLimit" {
+			return strconv.Itoa(minutes(val.Duration)), nil
 		}
+		return strconv.Itoa(int(val.Seconds())), nil
 	case bool:
 		if val {
-			return "1"
+			return "1", nil
 		}
-		return "0"
+		return "0", nil
 	case GameType:
-		return fmt.Sprintf("%d", val)
-	case Maps:
-		data, _ := val.Marshal()
-		return string(data)
+		return strconv.Itoa(int(val)), nil
 	default:
-		panic(fmt.Errorf("received unknown type %T", v.Interface()))
+		return "", errors.Errorf("unsupported config field type %T", val)
 	}
 }
 
@@ -216,7 +248,7 @@ func Default() *Config {
 		ServerConfig: ServerConfig{
 			MaxClients: 12,
 			Hostname:   "quakekube",
-			Password:   "changeme",
+			Password:   defaultRconPassword,
 		},
 		Maps: Maps{
 			{Name: "q3dm7", Type: FreeForAll},
@@ -236,20 +268,37 @@ type Map struct {
 
 type Maps []Map
 
+// Marshal renders the rotation using no global limits.
 func (maps Maps) Marshal() ([]byte, error) {
+	return maps.marshal(0, metav1.Duration{})
+}
+
+// marshal renders the map rotation. Each map sets fraglimit and timelimit
+// explicitly, falling back to the globals, so limits never leak between maps.
+func (maps Maps) marshal(fragLimit int, timeLimit metav1.Duration) ([]byte, error) {
 	var b bytes.Buffer
 	for i, m := range maps {
-		cmds := []string{
-			fmt.Sprintf("g_gametype %d", m.Type),
+		if len(m.Name) > maxMapNameLen || !mapNameRe.MatchString(m.Name) {
+			return nil, errors.Errorf("invalid map name %q", m.Name)
 		}
-		if m.Type == CaptureTheFlag && m.CaptureLimit != 0 {
-			cmds = append(cmds, fmt.Sprintf("capturelimit %d", m.CaptureLimit))
-		}
+		frag, limit := fragLimit, timeLimit.Duration
 		if m.FragLimit != 0 {
-			cmds = append(cmds, fmt.Sprintf("fraglimit %d", m.FragLimit))
+			frag = m.FragLimit
 		}
 		if m.TimeLimit.Duration != 0 {
-			cmds = append(cmds, fmt.Sprintf("timelimit %s", toString("TimeLimit", reflect.ValueOf(m.TimeLimit))))
+			limit = m.TimeLimit.Duration
+		}
+		cmds := []string{
+			fmt.Sprintf("g_gametype %d", m.Type),
+			fmt.Sprintf("fraglimit %d", frag),
+			fmt.Sprintf("timelimit %d", minutes(limit)),
+		}
+		if m.Type == CaptureTheFlag {
+			capture := m.CaptureLimit
+			if capture == 0 {
+				capture = defaultCaptureLimit
+			}
+			cmds = append(cmds, fmt.Sprintf("capturelimit %d", capture))
 		}
 		cmds = append(cmds, fmt.Sprintf("map %s", m.Name))
 		nextmap := "d0"
@@ -257,7 +306,7 @@ func (maps Maps) Marshal() ([]byte, error) {
 			nextmap = fmt.Sprintf("d%d", i+1)
 		}
 		cmds = append(cmds, fmt.Sprintf("set nextmap vstr %s", nextmap))
-		b.WriteString(fmt.Sprintf("set d%d \"seta %s\"\n", i, strings.Join(cmds, " ; ")))
+		fmt.Fprintf(&b, "set d%d \"seta %s\"\n", i, strings.Join(cmds, " ; "))
 	}
 	b.WriteString("vstr d0\n")
 	return b.Bytes(), nil
