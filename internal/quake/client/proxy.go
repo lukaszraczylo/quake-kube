@@ -3,7 +3,9 @@ package client
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -16,6 +18,9 @@ import (
 
 // Optimized buffer sizes for gaming traffic patterns
 const (
+	// readTimeout bounds silence from a websocket peer; pings go out every 15s.
+	readTimeout = 45 * time.Second
+
 	// Quake 3 max packet size is ~1400 bytes, use 2KB for safety
 	bufferSize = 2048
 
@@ -98,8 +103,11 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 	defer ws.Close()
 
 	// Set optimal websocket options for gaming traffic
-	ws.SetReadLimit(65536)                               // 64KB max message size for security
-	ws.SetPongHandler(func(string) error { return nil }) // Fast no-op pong handler
+	ws.SetReadLimit(65536) // 64KB max message size for security
+
+	// Dead peers must not pin a goroutine pair and a UDP socket forever: any
+	// message or pong pushes the deadline out, silence for readTimeout ends it.
+	ws.SetPongHandler(func(string) error { return ws.SetReadDeadline(time.Now().Add(readTimeout)) })
 
 	// Configure WS to not use compression for binary game data
 	ws.EnableWriteCompression(false)
@@ -118,7 +126,8 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 	}
 
 	// Create high-performance UDP listener
-	backend, err := udpConfig.ListenPacket(ctx, "udp", "0.0.0.0:0")
+	network, laddr := w.localSocket()
+	backend, err := udpConfig.ListenPacket(ctx, network, laddr)
 	if err != nil {
 		log.Printf("wsproxy: couldn't create UDP listener: %v", err)
 		return
@@ -135,9 +144,7 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 	// Cached values for better performance
 	portPrefix := []byte("\xff\xff\xff\xffport")
 
-	// Disable read deadline for long-running connections
-	if err := ws.SetReadDeadline(time.Time{}); err != nil {
-		errc <- err
+	if err := ws.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
 		return
 	}
 
@@ -169,35 +176,32 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		}()
 
 		for {
-			// Most efficient message reading method
-			_, msg, err := ws.ReadMessage()
+			msg, buf, err := readPacket(ws)
 			if err != nil {
-				// Handle close with proper error code propagation
-				m := websocket.FormatCloseMessage(websocket.CloseNormalClosure, fmt.Sprintf("%v", err))
-				if e, ok := err.(*websocket.CloseError); ok {
-					if e.Code != websocket.CloseNoStatusReceived {
-						m = websocket.FormatCloseMessage(e.Code, e.Text)
-					}
-				}
 				errc <- err
-				// Best effort close message
-				ws.WriteMessage(websocket.CloseMessage, m)
+				return
+			}
+			if derr := ws.SetReadDeadline(time.Now().Add(readTimeout)); derr != nil {
+				bufferPool.Put(buf)
+				errc <- derr
 				return
 			}
 
 			// Fast prefix check for special messages using direct comparison
 			if len(msg) >= 8 && bytes.Equal(msg[:8], portPrefix) {
+				bufferPool.Put(buf)
 				continue
 			}
 
 			// Short write deadline for better throughput
 			if err := backend.SetWriteDeadline(time.Now().Add(2 * time.Second)); err != nil {
+				bufferPool.Put(buf)
 				errc <- err
 				return
 			}
 
-			// Zero-copy write directly to UDP
 			_, err = backend.WriteTo(msg, w.addr)
+			bufferPool.Put(buf)
 			if err != nil {
 				errc <- err
 				return
@@ -217,13 +221,6 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		for {
 			// Get buffer from pool for zero-allocation reading
 			buf := bufferPool.Get().(*buffer)
-
-			// Read from UDP socket - no deadline for game traffic, rely on context cancellation
-			if err := backend.SetReadDeadline(time.Time{}); err != nil {
-				bufferPool.Put(buf)
-				errc <- err
-				return
-			}
 
 			n, _, err := backend.ReadFrom(buf.data)
 			if err != nil {
@@ -247,11 +244,58 @@ func (w *WebsocketUDPProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 	// Wait for any goroutine to signal completion
 	select {
 	case err := <-errc:
-		if e, ok := err.(*websocket.CloseError); !ok || e.Code == websocket.CloseAbnormalClosure {
+		closeMsg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")
+		var ce *websocket.CloseError
+		if errors.As(err, &ce) {
+			if ce.Code != websocket.CloseNoStatusReceived {
+				closeMsg = websocket.FormatCloseMessage(ce.Code, ce.Text)
+			}
+			if ce.Code == websocket.CloseAbnormalClosure {
+				log.Printf("wsproxy: %v", err)
+			}
+		} else {
 			log.Printf("wsproxy: %v", err)
 		}
+		// WriteControl is the only writer call safe beside the UDP->WS writer.
+		_ = ws.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(time.Second))
 	case <-ctx.Done():
 		// Context canceled (e.g., client disconnected)
 		return
 	}
+}
+
+// readPacket reads one websocket message into a pooled buffer. The caller
+// must return buf to bufferPool once msg is no longer used.
+func readPacket(ws *websocket.Conn) (msg []byte, buf *buffer, err error) {
+	_, r, err := ws.NextReader()
+	if err != nil {
+		return nil, nil, err
+	}
+	buf = bufferPool.Get().(*buffer)
+	n, err := io.ReadFull(r, buf.data)
+	switch err {
+	case io.EOF, io.ErrUnexpectedEOF:
+		return buf.data[:n], buf, nil
+	case nil:
+		// Message at least as large as the pooled buffer: take the rest.
+		rest, rerr := io.ReadAll(r)
+		if rerr != nil {
+			bufferPool.Put(buf)
+			return nil, nil, rerr
+		}
+		return append(buf.data[:n:n], rest...), buf, nil
+	default:
+		bufferPool.Put(buf)
+		return nil, nil, err
+	}
+}
+
+// localSocket returns a UDP socket family matching the backend. A dual-stack
+// "[::]" socket sending to an IPv4 target goes through v4-mapped addressing,
+// which dropped packets under load in tests.
+func (w *WebsocketUDPProxy) localSocket() (network, laddr string) {
+	if ua, ok := w.addr.(*net.UDPAddr); ok && ua.IP.To4() == nil && ua.IP != nil {
+		return "udp6", "[::]:0"
+	}
+	return "udp4", "0.0.0.0:0"
 }
