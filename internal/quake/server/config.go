@@ -8,9 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/pkg/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type GameType int
@@ -53,14 +50,14 @@ func (gt *GameType) UnmarshalText(data []byte) error {
 	case "CaptureTheFlag", "CTF":
 		*gt = CaptureTheFlag
 	default:
-		return errors.Errorf("unknown GameType: %s", data)
+		return fmt.Errorf("unknown GameType: %s", data)
 	}
 	return nil
 }
 
 type Config struct {
-	FragLimit int             `name:"fraglimit"`
-	TimeLimit metav1.Duration `name:"timelimit"`
+	FragLimit int      `name:"fraglimit"`
+	TimeLimit Duration `name:"timelimit"`
 
 	BotConfig        `json:"bot"`
 	GameConfig       `json:"game"`
@@ -77,15 +74,15 @@ type BotConfig struct {
 }
 
 type GameConfig struct {
-	ForceRespawn      bool            `name:"g_forcerespawn"`
-	GameType          GameType        `json:"type" name:"g_gametype"`
-	Inactivity        metav1.Duration `name:"g_inactivity"`
-	Log               string          `name:"g_log"`
-	MOTD              string          `name:"g_motd"`
-	Password          string          `name:"g_password"`
-	QuadFactor        int             `name:"g_quadfactor"`
-	SinglePlayerSkill int             `name:"g_spSkill"`
-	WeaponRespawn     int             `name:"g_weaponrespawn"`
+	ForceRespawn      bool     `name:"g_forcerespawn"`
+	GameType          GameType `json:"type" name:"g_gametype"`
+	Inactivity        Duration `name:"g_inactivity"`
+	Log               string   `name:"g_log"`
+	MOTD              string   `name:"g_motd"`
+	Password          string   `name:"g_password"`
+	QuadFactor        int      `name:"g_quadfactor"`
+	SinglePlayerSkill int      `name:"g_spSkill"`
+	WeaponRespawn     int      `name:"g_weaponrespawn"`
 }
 
 type FileServerConfig struct {
@@ -125,7 +122,7 @@ const (
 )
 
 var (
-	durationType = reflect.TypeOf(metav1.Duration{})
+	durationType = reflect.TypeOf(Duration{})
 	mapNameRe    = regexp.MustCompile(`^[A-Za-z0-9_\-]+$`)
 )
 
@@ -152,7 +149,7 @@ func (c *Config) Marshal() ([]byte, error) {
 // writeStruct writes every tagged scalar field; slices are handled by Marshal.
 func writeStruct(b *bytes.Buffer, v reflect.Value) error {
 	if v.Kind() != reflect.Struct {
-		return errors.Errorf("expected struct, received %s", v.Kind())
+		return fmt.Errorf("expected struct, received %s", v.Kind())
 	}
 	for i := 0; i < v.Type().NumField(); i++ {
 		fv := v.Field(i)
@@ -210,7 +207,7 @@ func toString(name string, v reflect.Value) (string, error) {
 		return val, nil
 	case int:
 		return strconv.Itoa(val), nil
-	case metav1.Duration:
+	case Duration:
 		if name == "TimeLimit" {
 			return strconv.Itoa(minutes(val.Duration)), nil
 		}
@@ -223,14 +220,14 @@ func toString(name string, v reflect.Value) (string, error) {
 	case GameType:
 		return strconv.Itoa(int(val)), nil
 	default:
-		return "", errors.Errorf("unsupported config field type %T", val)
+		return "", fmt.Errorf("unsupported config field type %T", val)
 	}
 }
 
 func Default() *Config {
 	return &Config{
 		FragLimit: 25,
-		TimeLimit: metav1.Duration{Duration: 15 * time.Minute},
+		TimeLimit: Duration{Duration: 15 * time.Minute},
 		Commands:  []string{},
 		BotConfig: BotConfig{
 			NoChat: true,
@@ -241,7 +238,7 @@ func Default() *Config {
 			QuadFactor:        3,
 			GameType:          FreeForAll,
 			WeaponRespawn:     3,
-			Inactivity:        metav1.Duration{Duration: 10 * time.Minute},
+			Inactivity:        Duration{Duration: 10 * time.Minute},
 			SinglePlayerSkill: 2,
 			ForceRespawn:      false,
 		},
@@ -261,25 +258,25 @@ type Map struct {
 	Name string   `json:"name"`
 	Type GameType `json:"type"`
 
-	CaptureLimit int             `json:"captureLimit"`
-	FragLimit    int             `json:"fragLimit"`
-	TimeLimit    metav1.Duration `json:"timeLimit"`
+	CaptureLimit int      `json:"captureLimit"`
+	FragLimit    int      `json:"fragLimit"`
+	TimeLimit    Duration `json:"timeLimit"`
 }
 
 type Maps []Map
 
 // Marshal renders the rotation using no global limits.
 func (maps Maps) Marshal() ([]byte, error) {
-	return maps.marshal(0, metav1.Duration{})
+	return maps.marshal(0, Duration{})
 }
 
 // marshal renders the map rotation. Each map sets fraglimit and timelimit
 // explicitly, falling back to the globals, so limits never leak between maps.
-func (maps Maps) marshal(fragLimit int, timeLimit metav1.Duration) ([]byte, error) {
+func (maps Maps) marshal(fragLimit int, timeLimit Duration) ([]byte, error) {
 	var b bytes.Buffer
 	for i, m := range maps {
 		if len(m.Name) > maxMapNameLen || !mapNameRe.MatchString(m.Name) {
-			return nil, errors.Errorf("invalid map name %q", m.Name)
+			return nil, fmt.Errorf("invalid map name %q", m.Name)
 		}
 		frag, limit := fragLimit, timeLimit.Duration
 		if m.FragLimit != 0 {

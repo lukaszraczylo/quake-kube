@@ -1,9 +1,9 @@
 package net
 
 import (
+	"errors"
+	"fmt"
 	"net"
-
-	"github.com/pkg/errors"
 )
 
 // DetectHostIPv4 attempts to determine the host IPv4 address by finding the
@@ -11,7 +11,7 @@ import (
 func DetectHostIPv4() (string, error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		return "", errors.WithStack(err)
+		return "", fmt.Errorf("list interface addresses: %w", err)
 	}
 	for _, a := range addrs {
 		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {

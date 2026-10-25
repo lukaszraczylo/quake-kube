@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cockroachdb/cmux"
+	"github.com/gorilla/websocket"
 )
 
 type Server struct {
@@ -16,32 +16,8 @@ type Server struct {
 	ServerAddr string
 }
 
+// Serve answers WebSocket upgrades with the UDP proxy and everything else with Handler.
 func (s *Server) Serve(l net.Listener) error {
-	// Configure multiplexer with optimized buffer size
-	m := cmux.New(l)
-
-	// Optimize for websocket connections with higher priority
-	websocketL := m.Match(cmux.HTTP1HeaderField("Upgrade", "websocket"))
-	httpL := m.Match(cmux.Any()) // HTTP fallback
-
-	// Serve regular HTTP traffic
-	go func() {
-		httpServer := &http.Server{
-			Addr:    s.Addr,
-			Handler: s.Handler,
-			// Optimized timeout settings for better connection handling
-			ReadTimeout:    2 * time.Minute, // Shorter for better resource usage
-			WriteTimeout:   2 * time.Minute, // Shorter for better resource usage
-			IdleTimeout:    3 * time.Minute, // Added idle timeout for connection reuse
-			MaxHeaderBytes: 1 << 16,         // 64KB is sufficient and more efficient
-			// Additional performance tuning
-			ReadHeaderTimeout: 5 * time.Second, // Protect against slow clients
-		}
-		if err := httpServer.Serve(httpL); err != cmux.ErrListenerClosed {
-			panic(err)
-		}
-	}()
-
 	host, port, err := net.SplitHostPort(s.ServerAddr)
 	if err != nil {
 		return err
@@ -56,23 +32,24 @@ func (s *Server) Serve(l net.Listener) error {
 		return err
 	}
 
-	go func() {
-		// Create optimized server for WebSocket traffic
-		wsServer := &http.Server{
-			Handler: wsproxy,
-			// WebSocket servers need longer timeouts
-			ReadTimeout:       5 * time.Minute,
-			WriteTimeout:      5 * time.Minute,
-			IdleTimeout:       10 * time.Minute, // WebSockets use long-lived connections
-			ReadHeaderTimeout: 10 * time.Second, // Faster header processing for WS upgrade
-		}
-
-		if err := wsServer.Serve(websocketL); err != cmux.ErrListenerClosed {
-			panic(err)
-		}
-	}()
-
-	return m.Serve()
+	srv := &http.Server{
+		Addr: s.Addr,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if websocket.IsWebSocketUpgrade(r) {
+				wsproxy.ServeHTTP(w, r)
+				return
+			}
+			s.Handler.ServeHTTP(w, r)
+		}),
+		// net/http clears these deadlines when a connection is hijacked, so they
+		// bound plain HTTP only; the proxy sets its own websocket deadlines.
+		ReadTimeout:       2 * time.Minute,
+		WriteTimeout:      2 * time.Minute,
+		IdleTimeout:       3 * time.Minute,
+		MaxHeaderBytes:    1 << 16,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	return srv.Serve(l)
 }
 
 func (s *Server) ListenAndServe() error {

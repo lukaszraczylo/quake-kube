@@ -2,6 +2,7 @@ package content
 
 import (
 	"encoding/json"
+	"fmt"
 	"hash/crc32"
 	"io"
 	"log"
@@ -9,8 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 type File struct {
@@ -104,7 +103,7 @@ func checksum(path string) (uint32, error) {
 	defer closeQuietly(f)
 	h := crc32.NewIEEE()
 	if _, err := io.Copy(h, f); err != nil {
-		return 0, errors.Wrapf(err, "checksum %s", path)
+		return 0, fmt.Errorf("checksum %s: %w", path, err)
 	}
 	return h.Sum32(), nil
 }

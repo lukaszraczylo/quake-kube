@@ -1,13 +1,12 @@
 package http
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 // Shared optimized HTTP client for reuse
@@ -62,7 +61,7 @@ var (
 func GetBody(url string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create request")
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Add performance-oriented headers
@@ -70,12 +69,12 @@ func GetBody(url string) ([]byte, error) {
 
 	resp, err := defaultClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute request")
+		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.Errorf("cannot get url %q: %v", url, http.StatusText(resp.StatusCode))
+		return nil, fmt.Errorf("cannot get url %q: %v", url, http.StatusText(resp.StatusCode))
 	}
 
 	// Use ReadAll with a buffer from the pool for better memory efficiency
@@ -101,7 +100,7 @@ func GetBody(url string) ([]byte, error) {
 			break
 		}
 		if err != nil {
-			return nil, errors.Wrap(err, "error reading response body")
+			return nil, fmt.Errorf("error reading response body: %w", err)
 		}
 	}
 
@@ -117,7 +116,7 @@ func GetUntil(url string, stop <-chan struct{}) error {
 	for {
 		select {
 		case <-stop:
-			return errors.Errorf("not available: %q", url)
+			return fmt.Errorf("not available: %q", url)
 		default:
 			req, err := http.NewRequest(http.MethodGet, url, nil)
 			if err != nil {

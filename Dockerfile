@@ -1,12 +1,3 @@
-FROM node:22-alpine AS web
-
-WORKDIR /web
-RUN corepack enable
-COPY web/package.json web/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
-COPY web/ ./
-RUN pnpm exec tsc -p tsconfig.build.json --outDir /public/app
-
 FROM golang:1 AS builder
 
 WORKDIR /workspace
@@ -19,9 +10,6 @@ RUN go mod download
 ADD cmd cmd/
 ADD internal internal/
 ADD public public/
-COPY --from=web /public/app public/app
-COPY tools tools/
-RUN /usr/local/go/bin/go run ./tools/genstatic.go public public
 
 RUN CGO_ENABLED=0 GOOS=linux GO111MODULE=on taskset -c 1 /usr/local/go/bin/go build -a -o q3 ./cmd/q3
 

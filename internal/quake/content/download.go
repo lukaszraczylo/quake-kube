@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	httputil "github.com/lukaszraczylo/quake-kube/internal/util/net/http"
-	"github.com/pkg/errors"
 )
 
 func CopyAssets(u *url.URL, dir string) error {
@@ -27,7 +26,7 @@ func CopyAssets(u *url.URL, dir string) error {
 	for _, f := range files {
 		path, err := safeJoin(dir, f.Name)
 		if err != nil {
-			return errors.Wrapf(err, "manifest entry %q", f.Name)
+			return fmt.Errorf("manifest entry %q: %w", f.Name, err)
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			continue
@@ -37,7 +36,7 @@ func CopyAssets(u *url.URL, dir string) error {
 			return err
 		}
 		if sum := crc32.ChecksumIEEE(data); sum != f.Checksum {
-			return errors.Errorf("checksum mismatch for %s: got %d, want %d", f.Name, sum, f.Checksum)
+			return fmt.Errorf("checksum mismatch for %s: got %d, want %d", f.Name, sum, f.Checksum)
 		}
 		if err := writeFileAtomic(path, bytes.NewReader(data)); err != nil {
 			return err
@@ -80,7 +79,7 @@ func getManifest(url string) ([]*File, error) {
 
 	files := make([]*File, 0)
 	if err := json.Unmarshal(data, &files); err != nil {
-		return nil, errors.Wrapf(err, "cannot unmarshal %s/assets/manifest.json", url)
+		return nil, fmt.Errorf("cannot unmarshal %s/assets/manifest.json: %w", url, err)
 	}
 	return files, nil
 }
@@ -94,7 +93,7 @@ func extractPointPacks(path, dir string) error {
 	}
 	idx := bytes.Index(data, gzipMagicHeader)
 	if idx < 0 {
-		return errors.Errorf("no gzip payload in %s", path)
+		return fmt.Errorf("no gzip payload in %s", path)
 	}
 	data = data[idx:]
 	gr, err := gzip.NewReader(bytes.NewReader(data))

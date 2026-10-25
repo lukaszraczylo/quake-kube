@@ -2,11 +2,11 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	quakeclient "github.com/lukaszraczylo/quake-kube/internal/quake/client"

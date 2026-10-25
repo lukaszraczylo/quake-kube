@@ -54,3 +54,7 @@ jobs:
           pnpm run typecheck
           pnpm test
           pnpm run build
+
+      - name: Check public/app is committed and current
+        working-directory: .
+        run: git diff --exit-code -- public/app

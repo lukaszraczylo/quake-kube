@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -87,8 +85,8 @@ func TestConfigMarshal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if diff := cmp.Diff(string(data), expectedConfig); diff != "" {
-		t.Fatalf("unexpected diff: %s", diff)
+	if got := string(data); got != expectedConfig {
+		t.Fatalf("config differs\n--- got ---\n%s\n--- want ---\n%s", got, expectedConfig)
 	}
 }
 
@@ -96,7 +94,7 @@ func TestMapLimitsDoNotLeak(t *testing.T) {
 	cfg := Default()
 	cfg.FragLimit = 30
 	cfg.Maps = Maps{
-		{Name: "a", FragLimit: 5, TimeLimit: metav1.Duration{Duration: 5 * time.Minute}},
+		{Name: "a", FragLimit: 5, TimeLimit: Duration{Duration: 5 * time.Minute}},
 		{Name: "b"},
 		{Name: "c", Type: CaptureTheFlag},
 	}

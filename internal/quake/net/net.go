@@ -2,12 +2,11 @@ package net
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -34,19 +33,19 @@ func SendCommand(addr, cmd string) ([]byte, error) {
 	// Resolve the address once
 	raddr, err := net.ResolveUDPAddr("udp4", addr)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to resolve UDP address")
+		return nil, fmt.Errorf("failed to resolve UDP address: %w", err)
 	}
 
 	// Use a dialer instead of ListenPacket for better performance
 	conn, err := net.DialUDP("udp4", nil, raddr)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create UDP connection")
+		return nil, fmt.Errorf("failed to create UDP connection: %w", err)
 	}
 	defer conn.Close()
 
 	// Set deadline immediately to avoid hanging
 	if err := conn.SetDeadline(time.Now().Add(connectionTimeout)); err != nil {
-		return nil, errors.Wrap(err, "failed to set deadline")
+		return nil, fmt.Errorf("failed to set deadline: %w", err)
 	}
 
 	// Create the command once with proper capacity estimation
@@ -54,7 +53,7 @@ func SendCommand(addr, cmd string) ([]byte, error) {
 
 	// Send the command
 	if _, err := conn.Write([]byte(command)); err != nil {
-		return nil, errors.Wrap(err, "failed to send command")
+		return nil, fmt.Errorf("failed to send command: %w", err)
 	}
 
 	// Get a buffer from the pool
@@ -65,7 +64,7 @@ func SendCommand(addr, cmd string) ([]byte, error) {
 	// Read the response
 	n, err := conn.Read(buffer)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read response")
+		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	// Return a copy of the relevant part of the buffer
@@ -184,7 +183,7 @@ func GetStatus(addr string) (*StatusResponse, error) {
 	// Fetch response with better error handling
 	resp, err := SendCommand(addr, GetStatusCommand)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to send status command")
+		return nil, fmt.Errorf("failed to send status command: %w", err)
 	}
 
 	// Trim once for efficiency
@@ -216,6 +215,6 @@ func GetStatus(addr string) (*StatusResponse, error) {
 		}
 		return status, nil
 	default:
-		return nil, errors.Errorf("invalid response format: %q", resp)
+		return nil, fmt.Errorf("invalid response format: %q", resp)
 	}
 }

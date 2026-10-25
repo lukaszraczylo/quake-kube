@@ -3,14 +3,11 @@ LDFLAGS := -s -w
 GOFLAGS = -gcflags "all=-trimpath=$(PWD)" -asmflags "all=-trimpath=$(PWD)"
 GO_BUILD_ENV_VARS := GO111MODULE=on CGO_ENABLED=0
 
-q3: gen
+q3:
 	@$(GO_BUILD_ENV_VARS) go build -o $(BIN_DIR)/q3 $(GOFLAGS) -ldflags '$(LDFLAGS)' ./cmd/q3
 
-web: ## Build the TypeScript frontend into public/app.js
+web: ## Build the TypeScript frontend into public/app (commit the result)
 	@cd web && pnpm install --frozen-lockfile && pnpm run typecheck && pnpm test && pnpm run build
-
-gen: web ## Generate and embed templates
-	@go run tools/genstatic.go public public
 
 VERSION ?= $(shell semver-gen generate -l 2>/dev/null | awk '{print $$2}' || echo "latest")
 IMAGE_BASE ?= ghcr.io/lukaszraczylo/q3

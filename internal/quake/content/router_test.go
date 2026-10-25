@@ -2,8 +2,6 @@ package content
 
 import (
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 func TestTrimAssetName(t *testing.T) {
@@ -27,8 +25,8 @@ func TestTrimAssetName(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			result := trimAssetName(c.input)
-			if diff := cmp.Diff(c.expected, result); diff != "" {
-				t.Errorf("content: after trimAssetName differs: (-want +got)\n%s", diff)
+			if result != c.expected {
+				t.Errorf("trimAssetName(%q) = %q, want %q", c.input, result, c.expected)
 			}
 		})
 	}

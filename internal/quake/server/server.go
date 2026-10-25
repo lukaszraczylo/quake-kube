@@ -2,13 +2,13 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"sigs.k8s.io/yaml"
